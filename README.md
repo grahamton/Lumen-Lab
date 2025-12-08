@@ -11,6 +11,7 @@ Creating psychedelic or "trippy" fabrics often involves complex mirroring and ge
 1.  **Instant Mandalas**: Turn any photo into a perfect kaleidoscope instantly.
 2.  **Seamless Repeats**: The "Pattern" feature automatically tiles your design, ensuring it wraps perfectly around the edges for infinite printing.
 3.  **Organic Flow**: Add "melt" and "warp" effects that mimic hydro-dipping or tie-dye aesthetics.
+4.  **Print Ready**: Use "Posterize" to reduce colors for screen printing, or "Neon Edges" for high-contrast rave wear.
 
 ---
 
@@ -36,7 +37,12 @@ This tool bends space itself. It takes your straight lines and twists them into 
 *   **Edge Softness**: Fade the edges of your image or tiles to create a seamless blend.
 *   **Freeze**: Lock the center of your image while the rest moves or distorts.
 
-### 5. The Time Studio (Animation)
+### 5. Alchemy (Post-Processing)
+Give your design a final stylistic polish.
+*   **Posterize**: Reduce the number of colors. Essential for creating that "vintage screen print" look or simplifying palettes for actual printing.
+*   **Neon Edges**: Turns your image into a glowing outline drawing. Perfect for black-light reactive designs.
+
+### 6. The Time Studio (Animation)
 While fabrics are static, seeing your design move helps you find the perfect "frame" to freeze.
 *   **Video Echo**: Creates trails behind moving parts, adding a sense of motion to still images.
 *   **Loop Recording**: Capture a 3-second seamless video. Great for projecting onto your white fabrics at events!
@@ -57,6 +63,7 @@ While fabrics are static, seeing your design move helps you find the perfect "fr
     *   **Mandala**: Turn on "Mandala" to find a central motif.
     *   **Warp**: Add some "Warping" or "Displacement" to make it look organic.
     *   **Pattern**: Go to the **Pattern** section and select **Mirror**. Adjust the **Tile Scale** and **Overlap**.
+    *   **Alchemy**: Use **Neon Edges** or **Posterize** to stylize the final look.
     *   **Capture**: When you see a pattern you love, you can screenshot it for high-res printing or record a loop.
 
 ## 🛠️ Technology

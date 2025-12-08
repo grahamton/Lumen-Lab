@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore'
 export function Canvas() {
   const canvasRef = useRef(null)
   const backBufferRef = useRef(null) // Persistent back-buffer
-  const { image, transforms, symmetry, warp, displacement, masking, feedback, recording, setRecording, tiling } = useStore()
+  const { image, transforms, symmetry, warp, displacement, masking, feedback, recording, setRecording, tiling, color, effects } = useStore()
 
   // Recording Effect
   useEffect(() => {
@@ -165,66 +165,50 @@ export function Canvas() {
       }
     }
 
-    // --- TILING LOGIC (Phase 5) ---
+    // --- GLOBAL FEATHER + TILING LOGIC ---
+    // We create a "Unit Cell Canvas" IF feathering is active OR if performance needs it,
+    // but feathering is the main driver here.
+
+    let unitCellCanvas = null
+    const hasFeather = masking.feather > 0
+
+    // Create Feathered Unit Cell if needed
+    if (hasFeather) {
+      unitCellCanvas = document.createElement('canvas')
+      unitCellCanvas.width = canvas.width
+      unitCellCanvas.height = canvas.height
+      const ucCtx = unitCellCanvas.getContext('2d')
+
+      // Draw Active Geometry (this is the raw symmetry/mandala)
+      drawActiveGeometry(ucCtx)
+
+      // Determine Feather Size
+      // If Tiling, it's relative to Tile Size. If Single, it's Screen Size.
+      let featherSize = Math.min(canvas.width, canvas.height)
+      if (tiling.type !== 'none') {
+        featherSize = Math.min(canvas.width, canvas.height) * tiling.scale
+      }
+
+      // Apply Radial Mask
+      ucCtx.globalCompositeOperation = 'destination-in'
+      const grad = ucCtx.createRadialGradient(
+        centerX, centerY,
+        featherSize * 0.5 * (1 - masking.feather),
+        centerX, centerY,
+        featherSize * 0.5
+      )
+      grad.addColorStop(0, 'rgba(0,0,0,1)')
+      grad.addColorStop(1, 'rgba(0,0,0,0)')
+
+      ucCtx.fillStyle = grad
+      ucCtx.fillRect(0, 0, unitCellCanvas.width, unitCellCanvas.height)
+      ucCtx.globalCompositeOperation = 'source-over'
+    }
+
     if (tiling.type !== 'none') {
       const tileSize = Math.min(canvas.width, canvas.height) * tiling.scale
       const cols = Math.ceil(canvas.width / tileSize) + 2
       const rows = Math.ceil(canvas.height / tileSize) + 2
-
-      // offCtx is clear (new canvas)
-
-      // We iterate and draw tiles
-      // We iterate and draw tiles
-
-      // CACHE: If feather > 0, we should pre-render the feathered unit cell to improve performance?
-      // For now, let's do it per tile or use a temp canvas for the unit cell.
-
-      let unitCellCanvas = null
-
-      if (tiling.feather > 0) {
-        const size = Math.min(canvas.width, canvas.height) // Base size for unit cell gen?
-        // To properly feather, we need the unit cell as an image.
-        // Let's create a temp canvas that contains the result of `drawActiveGeometry`
-        unitCellCanvas = document.createElement('canvas')
-        // Render at screen resolution for quality, or tile resolution?
-        // Let's match screen to be safe for now, though performance heavy.
-        unitCellCanvas.width = canvas.width
-        unitCellCanvas.height = canvas.height
-        const ucCtx = unitCellCanvas.getContext('2d')
-
-        // Draw Active geometry centered
-        ucCtx.translate(centerX, centerY)
-        // We need to undo the canvas translation if we want it centered in temp
-        // Actually drawActiveGeometry assumes (centerX, centerY) as origin.
-        // So we just call it on ucCtx.
-        // But wait, drawActiveGeometry sets its own transforms?
-        // No, it expects targetCtx to have default transform (identity). It does internal translates.
-        drawActiveGeometry(ucCtx)
-
-        // Apply Feather Mask
-        // Radial Gradient or Rect Gradient? p1 usually implies rectangular tile.
-        // But symmetry shapes are circular/wedge.
-        // "Perfect seamless duplication" for p1 usually means Rectangular Fade.
-
-        const f = tiling.feather * 0.5 // 0 to 0.5 radius
-        // We want to fade the edges of the TILE, not the screen.
-        // But the geometry is drawn "full screen".
-        // We need to adhere to the `tileSize`.
-        // This is tricky because `drawActiveGeometry` draws unbounded.
-
-        // Simplified Feather: Mask the Unit Cell to a Circle or Box based on tileSize?
-        // Let's try Radial since symmetry is radial.
-
-        ucCtx.globalCompositeOperation = 'destination-in'
-        const grad = ucCtx.createRadialGradient(centerX, centerY, tileSize * 0.5 * (1 - tiling.feather), centerX, centerY, tileSize * 0.5)
-        grad.addColorStop(0, 'rgba(0,0,0,1)')
-        grad.addColorStop(1, 'rgba(0,0,0,0)')
-
-        ucCtx.fillStyle = grad
-        ucCtx.fillRect(0, 0, unitCellCanvas.width, unitCellCanvas.height)
-
-        ucCtx.globalCompositeOperation = 'source-over'
-      }
 
       for (let row = -1; row < rows; row++) {
         for (let col = -1; col < cols; col++) {
@@ -243,42 +227,34 @@ export function Canvas() {
               offCtx.rotate(Math.PI)
             }
           } else if (tiling.type === 'p4m') {
-            const isColOdd = col % 2 !== 0
-            const isRowOdd = row % 2 !== 0
+            // Logic for p4m from previous step
+            // Revert to Top-Left reference for transforms
+            offCtx.translate(-halfTile, -halfTile)
 
-            // Move origin to corner for scaling? No, logic above was:
-            // if col%2!=0, translate(tileSize, 0) scale(-1, 1)
-            // relative to tx, ty (top left of tile)
-
-            // Let's revert to Top-Left logic for transforms if p4m
-            offCtx.translate(-halfTile, -halfTile) // Go back to top-left
-
-            if (isColOdd) {
+            if (col % 2 !== 0) {
               offCtx.translate(tileSize, 0)
               offCtx.scale(-1, 1)
             }
-            if (isRowOdd) {
+            if (row % 2 !== 0) {
               offCtx.translate(0, tileSize)
               offCtx.scale(1, -1)
             }
 
-            offCtx.translate(halfTile, halfTile) // Go back to center
+            offCtx.translate(halfTile, halfTile)
           }
 
-          // Apply Overlap (Scale the drawing, not the grid)
+          // Apply Overlap
           const scaleMult = 1.0 + tiling.overlap
           offCtx.scale(scaleMult, scaleMult)
 
-          // Draw Unit Cell
-          // We need to scale the "Screen Size" geometry down to "Tile Size"
+          // Scale Screen-Space Geometry to Tile-Space
           const baseScale = tileSize / Math.min(canvas.width, canvas.height)
           offCtx.scale(baseScale, baseScale)
 
           // Move (0,0) to be the "Center" of the screen space for drawActiveGeometry
           offCtx.translate(-centerX, -centerY)
 
-          if (tiling.feather > 0 && unitCellCanvas) {
-            // Draw the pre-feathered image
+          if (hasFeather && unitCellCanvas) {
             offCtx.drawImage(unitCellCanvas, 0, 0)
           } else {
             drawActiveGeometry(offCtx)
@@ -288,13 +264,19 @@ export function Canvas() {
         }
       }
     } else {
-      drawActiveGeometry(offCtx)
+      // Single Draw Logic (No Tiling)
+      if (hasFeather && unitCellCanvas) {
+        offCtx.drawImage(unitCellCanvas, 0, 0)
+      } else {
+        drawActiveGeometry(offCtx)
+      }
     }
 
-    // --- PIXEL LOOP (Warp + Displacement + Masking) ---
+    // --- PIXEL LOOP (Warp + Displacement + Masking + Alchemy) ---
     const hasWarp = warp.type !== 'none'
     const hasDisplacement = displacement.amp > 0
     const hasMasking = masking.lumaThreshold > 0 || masking.centerRadius > 0
+    const hasAlchemy = color.posterize < 32 || effects.edgeDetect
 
     const fxCanvas = document.createElement('canvas')
     fxCanvas.width = canvas.width
@@ -302,13 +284,14 @@ export function Canvas() {
     const fxCtx = fxCanvas.getContext('2d')
     let outputCtx = ctx // Default to main
 
-    if (hasWarp || hasDisplacement || hasMasking) {
+    // If we have ANY pixel effects, we must use the FX buffer
+    if (hasWarp || hasDisplacement || hasMasking || hasAlchemy) {
       outputCtx = fxCtx
     } else {
       ctx.drawImage(offCanvas, 0, 0)
     }
 
-    if (hasWarp || hasDisplacement || hasMasking) {
+    if (hasWarp || hasDisplacement || hasMasking || hasAlchemy) {
       const srcData = offCtx.getImageData(0, 0, canvas.width, canvas.height)
       const origData = origCtx.getImageData(0, 0, canvas.width, canvas.height)
       const dstData = fxCtx.createImageData(canvas.width, canvas.height)
@@ -322,6 +305,7 @@ export function Canvas() {
       const radiusSq = (masking.centerRadius / 100 * Math.min(canvas.width, canvas.height) / 2) ** 2
       const lumaThresh = masking.lumaThreshold * 2.55
 
+      // Pass 1: Warp, Displacement, Masking
       for (let y = 0; y < srcH; y++) {
         for (let x = 0; x < srcW; x++) {
 
@@ -404,6 +388,55 @@ export function Canvas() {
           }
         }
       }
+
+      // Pass 2: Alchemy (Edge Detect + Posterize)
+      if (effects.edgeDetect) {
+        const edgeData = new Uint8ClampedArray(dstData.data)
+        const w = canvas.width
+        const h = canvas.height
+
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            let gx = 0
+            let gy = 0
+
+            for (let ky = -1; ky <= 1; ky++) {
+              for (let kx = -1; kx <= 1; kx++) {
+                const idx = ((y + ky) * w + (x + kx)) * 4
+                const val = edgeData[idx + 1] // Green channel intensity
+
+                // Gx
+                if (kx === -1) gx -= val * (ky === 0 ? 2 : 1)
+                if (kx === 1) gx += val * (ky === 0 ? 2 : 1)
+
+                // Gy
+                if (ky === -1) gy -= val * (kx === 0 ? 2 : 1)
+                if (ky === 1) gy += val * (kx === 0 ? 2 : 1)
+              }
+            }
+
+            const mag = Math.min(255, Math.sqrt(gx * gx + gy * gy))
+            const i = (y * w + x) * 4
+
+            dstData.data[i] = mag > 40 ? mag : 0
+            dstData.data[i + 1] = mag > 40 ? mag * 0.8 : 0  // Slight purple tint
+            dstData.data[i + 2] = mag > 40 ? mag * 1.5 : 0
+            dstData.data[i + 3] = 255
+          }
+        }
+      }
+
+      if (color.posterize < 32) {
+        const levels = Math.floor(color.posterize)
+        const step = 255 / (levels - 1)
+
+        for (let i = 0; i < dstData.data.length; i += 4) {
+          dstData.data[i] = Math.floor(dstData.data[i] / step) * step
+          dstData.data[i + 1] = Math.floor(dstData.data[i + 1] / step) * step
+          dstData.data[i + 2] = Math.floor(dstData.data[i + 2] / step) * step
+        }
+      }
+
       fxCtx.putImageData(dstData, 0, 0)
       ctx.drawImage(fxCanvas, 0, 0)
     }
@@ -413,7 +446,7 @@ export function Canvas() {
     backCtx.drawImage(canvas, 0, 0)
 
 
-  }, [image, transforms, symmetry, warp, displacement, masking, feedback, tiling, window.innerWidth, window.innerHeight])
+  }, [image, transforms, symmetry, warp, displacement, masking, feedback, tiling, color, effects, window.innerWidth, window.innerHeight])
 
   return (
     <canvas ref={canvasRef} className="block w-full h-full" />

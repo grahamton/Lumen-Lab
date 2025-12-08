@@ -1,9 +1,9 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
-import { Upload, RefreshCw, Hexagon, Waves, Zap, EyeOff, Infinity, Circle, Square, Grid } from 'lucide-react'
+import { Upload, RefreshCw, Hexagon, Waves, Zap, EyeOff, Infinity, Circle, Square, Grid, Palette, Activity } from 'lucide-react'
 
 export function Controls() {
-  const { transforms, setTransform, resetTransforms, setImage, symmetry, setSymmetry, warp, setWarp, displacement, setDisplacement, masking, setMasking, feedback, setFeedback, recording, setRecording, tiling, setTiling } = useStore()
+  const { transforms, setTransform, resetTransforms, setImage, symmetry, setSymmetry, warp, setWarp, displacement, setDisplacement, masking, setMasking, feedback, setFeedback, recording, setRecording, tiling, setTiling, color, setColor, effects, setEffects } = useStore()
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
@@ -50,7 +50,7 @@ export function Controls() {
         <div className="pb-4 border-b border-neutral-700 pt-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-neutral-300 flex items-center gap-2">
-              <Hexagon size={14} /> Symmetry
+              <Hexagon size={14} /> Mandala
             </h3>
             <label className="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" checked={symmetry.enabled} onChange={(e) => setSymmetry('enabled', e.target.checked)} className="sr-only peer" />
@@ -59,34 +59,41 @@ export function Controls() {
           </div>
 
           {symmetry.enabled && (
-            <ControlGroup label="Slices" value={symmetry.slices} min={2} max={32} step={2} onChange={(v) => setSymmetry('slices', v)} tooltip="Number of kaleidoscope wedges. Higher = more complexity." />
+            <ControlGroup label="Points" value={symmetry.slices} min={2} max={32} step={2} onChange={(v) => setSymmetry('slices', v)} tooltip="Number of kaleidoscope wedges. Higher = more complexity." />
           )}
         </div>
 
         {/* Tiling Controls (Phase 5) */}
         <div className="pb-4 border-b border-neutral-700 pt-2">
           <h3 className="font-bold text-neutral-300 flex items-center gap-2 mb-2">
-            <Grid size={14} /> Wallpaper Tiling
+            <Grid size={14} /> Pattern
           </h3>
           <div className="flex gap-1 mb-2">
-            {['none', 'p1', 'p2', 'p4m'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setTiling('type', type)}
-                className={`text-xs px-2 py-1 rounded capitalize transition-colors flex-1 ${tiling.type === type
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
-                  }`}
-              >
-                {type}
-              </button>
-            ))}
+            {['none', 'p1', 'p2', 'p4m'].map((type) => {
+              const labels = {
+                'none': 'Off',
+                'p1': 'Grid',
+                'p2': 'Spin',
+                'p4m': 'Mirror'
+              }
+              return (
+                <button
+                  key={type}
+                  onClick={() => setTiling('type', type)}
+                  className={`text-xs px-2 py-1 rounded capitalize transition-colors flex-1 ${tiling.type === type
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                    }`}
+                >
+                  {labels[type]}
+                </button>
+              )
+            })}
           </div>
           {tiling.type !== 'none' && (
             <>
               <ControlGroup label="Tile Scale" value={tiling.scale} min={0.1} max={2.0} step={0.1} onChange={(v) => setTiling('scale', v)} tooltip="Size of the repeating pattern." />
               <ControlGroup label="Overlap" value={tiling.overlap} min={0} max={1} step={0.05} onChange={(v) => setTiling('overlap', v)} tooltip="Draw tiles larger than the grid to overlap them." />
-              <ControlGroup label="Feather" value={tiling.feather} min={0} max={1} step={0.05} onChange={(v) => setTiling('feather', v)} tooltip="Softness of the tile edges for seamless blending." />
             </>
           )}
         </div>
@@ -132,8 +139,9 @@ export function Controls() {
         {/* Masking Controls (Phase 3) */}
         <div className="pt-2">
           <h3 className="font-bold text-neutral-300 flex items-center gap-2 mb-2">
-            <EyeOff size={14} /> Freeze (Masking)
+            <EyeOff size={14} /> Masks & Edges
           </h3>
+          <ControlGroup label="Edge Softness" value={masking.feather} min={0} max={1} step={0.05} onChange={(v) => setMasking('feather', v)} tooltip="Softness of the image/tile edges." />
           <ControlGroup label="Center Radius" value={masking.centerRadius} min={0} max={100} onChange={(v) => setMasking('centerRadius', v)} tooltip="Freeze the center of the image (Radius %)." />
           <ControlGroup label="Luma Key" value={masking.lumaThreshold} min={0} max={100} onChange={(v) => setMasking('lumaThreshold', v)} tooltip="Freeze dark/light pixels based on brightness." />
 
@@ -141,6 +149,24 @@ export function Controls() {
             <input type="checkbox" checked={masking.invertLuma} onChange={(e) => setMasking('invertLuma', e.target.checked)} className="rounded bg-neutral-600 border-neutral-500 text-cyan-500 focus:ring-0" />
             <span>Invert Luma Key</span>
           </label>
+        </div>
+
+        {/* Alchemy Controls (Phase 6) */}
+        <div className="pt-2 border-t border-neutral-700 mt-2">
+          <h3 className="font-bold text-neutral-300 flex items-center gap-2 mb-2">
+            <Palette size={14} /> Alchemy
+          </h3>
+          <ControlGroup label="Posterize" value={color.posterize} min={2} max={32} step={1} onChange={(v) => setColor('posterize', v)} tooltip="Reduce colors for a retro/print look." />
+
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-neutral-400 flex items-center gap-2">
+              <Activity size={12} /> Neon Edges
+            </span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={effects.edgeDetect} onChange={(e) => setEffects('edgeDetect', e.target.checked)} className="sr-only peer" />
+              <div className="w-9 h-5 bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+            </label>
+          </div>
         </div>
 
         {/* Recording Controls (Phase 4) */}

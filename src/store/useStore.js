@@ -35,6 +35,7 @@ export const useStore = create((set) => ({
     lumaThreshold: 0, // 0-100%
     centerRadius: 0, // 0-100%
     invertLuma: false,
+    feather: 0.0, // 0.0 - 1.0 (Edge softness)
   },
 
   // Feedback State (Phase 4)
@@ -53,7 +54,15 @@ export const useStore = create((set) => ({
     type: 'none', // 'none', 'p1', 'p2', 'p4m', 'p6m'
     scale: 1.0, // 0.1 - 2.0
     overlap: 0.0, // 0.0 - 1.0 (Percentage of overlap)
-    feather: 0.0, // 0.0 - 1.0 (Edge softness)
+  },
+
+  // Phase 6: Alchemist's Lab
+  color: {
+    posterize: 256, // 2-256 (256 = off)
+  },
+  effects: {
+    edgeDetect: false,
+    edgeStrength: 1.0,
   },
 
   // Actions
@@ -89,14 +98,24 @@ export const useStore = create((set) => ({
     tiling: { ...state.tiling, [key]: value }
   })),
 
+  setColor: (key, value) => set((state) => ({
+    color: { ...state.color, [key]: value }
+  })),
+
+  setEffects: (key, value) => set((state) => ({
+    effects: { ...state.effects, [key]: value }
+  })),
+
   resetTransforms: () => set({
     transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
     symmetry: { enabled: false, slices: 6 },
     warp: { type: 'none' },
     displacement: { amp: 0, freq: 10 },
-    masking: { lumaThreshold: 0, centerRadius: 0, invertLuma: false },
+    masking: { lumaThreshold: 0, centerRadius: 0, invertLuma: false, feather: 0.0 },
     feedback: { amount: 0 },
     recording: { isActive: false, progress: 0 },
-    tiling: { type: 'none', scale: 1.0, overlap: 0.0, feather: 0.0 }
+    tiling: { type: 'none', scale: 1.0, overlap: 0.0 },
+    color: { posterize: 256 },
+    effects: { edgeDetect: false, edgeStrength: 1.0 }
   })
 }))
