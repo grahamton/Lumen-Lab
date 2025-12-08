@@ -62,10 +62,103 @@ export const useStore = create((set) => ({
   },
   effects: {
     edgeDetect: false,
+    edgeDetect: false,
     edgeStrength: 1.0,
   },
 
+  // Phase 7: The Director's Cut
+  snapshots: [],
+  animation: {
+    isPlaying: false,
+    duration: 3000, // ms per transition
+    mode: 'loop', // 'loop', 'pingpong'
+  },
+
   // Actions
+  randomize: () => set((state) => {
+    // Helper for random range
+    const rng = (min, max) => Math.random() * (max - min) + min
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+    // Aesthetic Constraints
+    const symmetrySlices = pick([4, 6, 8, 12, 16])
+    const tilingType = Math.random() > 0.3 ? pick(['p1', 'p2', 'p4m']) : 'none'
+    const warpType = Math.random() > 0.4 ? pick(['polar', 'log-polar']) : 'none'
+
+    return {
+      transforms: {
+        x: rng(-100, 100),
+        y: rng(-100, 100),
+        scale: rng(0.5, 1.5),
+        rotation: rng(0, Math.PI * 2),
+      },
+      symmetry: {
+        enabled: Math.random() > 0.3,
+        slices: symmetrySlices,
+      },
+      warp: {
+        type: warpType,
+      },
+      displacement: {
+        amp: Math.random() > 0.5 ? rng(0, 30) : 0,
+        freq: rng(5, 20),
+      },
+      tiling: {
+        type: tilingType,
+        scale: rng(0.5, 1.5),
+        overlap: rng(0, 0.3),
+      },
+      masking: {
+        lumaThreshold: Math.random() > 0.7 ? rng(0, 50) : 0,
+        centerRadius: Math.random() > 0.7 ? rng(0, 40) : 0,
+        invertLuma: Math.random() > 0.5,
+        feather: rng(0, 0.4),
+      },
+      color: {
+        posterize: Math.random() > 0.6 ? Math.floor(rng(2, 8)) : 256,
+      },
+      effects: {
+        edgeDetect: Math.random() > 0.8,
+        edgeStrength: 1.0,
+      }
+    }
+  }),
+
+  addSnapshot: () => set((state) => {
+    // Capture current visual state
+    const snap = {
+      transforms: { ...state.transforms },
+      symmetry: { ...state.symmetry },
+      warp: { ...state.warp },
+      displacement: { ...state.displacement },
+      tiling: { ...state.tiling },
+      masking: { ...state.masking },
+      color: { ...state.color },
+      effects: { ...state.effects },
+      id: Date.now()
+    }
+    return { snapshots: [...state.snapshots, snap] }
+  }),
+
+  deleteSnapshot: (index) => set((state) => ({
+    snapshots: state.snapshots.filter((_, i) => i !== index)
+  })),
+
+  loadSnapshot: (snap) => set({
+    transforms: { ...snap.transforms },
+    symmetry: { ...snap.symmetry },
+    warp: { ...snap.warp },
+    displacement: { ...snap.displacement },
+    tiling: { ...snap.tiling },
+    masking: { ...snap.masking },
+    color: { ...snap.color },
+    effects: { ...snap.effects },
+  }),
+
+  setAnimation: (key, value) => set((state) => ({
+    animation: { ...state.animation, [key]: value }
+  })),
+
   setTransform: (key, value) => set((state) => ({
     transforms: { ...state.transforms, [key]: value }
   })),
