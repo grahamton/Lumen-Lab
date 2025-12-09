@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import process from 'process'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
