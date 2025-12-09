@@ -38,11 +38,6 @@ export const useStore = create((set) => ({
     feather: 0.0, // 0.0 - 1.0 (Edge softness)
   },
 
-  // Feedback State (Phase 4)
-  feedback: {
-    amount: 0, // 0-100% (0.0 - 0.95)
-  },
-
   // Recording State (Phase 4)
   recording: {
     isActive: false,
@@ -56,14 +51,33 @@ export const useStore = create((set) => ({
     overlap: 0.0, // 0.0 - 1.0 (Percentage of overlap)
   },
 
+  // Math Seeds (Generative)
+  generator: {
+    type: 'none', // 'none', 'fibonacci', 'voronoi', 'grid'
+    // Parameters
+    param1: 50, // Count / Density
+    param2: 50, // Spread / Speed
+    param3: 50, // Detail / Thickness
+  },
+
   // Phase 6: Alchemist's Lab
   color: {
     posterize: 256, // 2-256 (256 = off)
   },
   effects: {
-    edgeDetect: false,
-    edgeDetect: false,
-    edgeStrength: 1.0,
+    edgeDetect: 0, // 0-100 (Intensity)
+    invert: 0,     // 0-100 (Intensity)
+    solarize: 0,   // 0-100 (Intensity)
+    shift: 0,      // 0-100 (Intensity)
+  },
+
+  // Phase 8: The Projectionist (Canvas Control)
+  canvas: {
+    width: 1920,
+    height: 1080,
+    aspect: 'video', // 'free', 'video', 'square', 'portrait'
+    fit: 'contain',
+    shape: 'rectangle', // 'rectangle', 'circle'
   },
 
   // Phase 7: The Director's Cut
@@ -100,8 +114,8 @@ export const useStore = create((set) => ({
         type: warpType,
       },
       displacement: {
-        amp: Math.random() > 0.5 ? rng(0, 30) : 0,
-        freq: rng(5, 20),
+        amp: Math.random() > 0.5 ? rng(0, 150) : 0, // Increased Max Amp
+        freq: rng(5, 50),
       },
       tiling: {
         type: tilingType,
@@ -115,11 +129,21 @@ export const useStore = create((set) => ({
         feather: rng(0, 0.4),
       },
       color: {
-        posterize: Math.random() > 0.6 ? Math.floor(rng(2, 8)) : 256,
+        posterize: Math.random() > 0.6 ? Math.floor(rng(4, 16)) : 256,
       },
       effects: {
-        edgeDetect: Math.random() > 0.8,
-        edgeStrength: 1.0,
+        edgeDetect: Math.random() > 0.7 ? rng(20, 100) : 0,
+        invert: Math.random() > 0.8 ? rng(20, 100) : 0,
+        solarize: Math.random() > 0.8 ? rng(20, 100) : 0,
+        shift: Math.random() > 0.8 ? rng(5, 50) : 0,
+      },
+      generator: {
+        ...state.generator,
+        param1: rng(10, 90),
+        param2: rng(10, 90),
+      },
+      canvas: {
+        ...state.canvas, // PROTECT CANVAS SETTINGS
       }
     }
   }),
@@ -135,6 +159,7 @@ export const useStore = create((set) => ({
       masking: { ...state.masking },
       color: { ...state.color },
       effects: { ...state.effects },
+      generator: { ...state.generator }, // Capture Generator State
       id: Date.now()
     }
     return { snapshots: [...state.snapshots, snap] }
@@ -153,6 +178,7 @@ export const useStore = create((set) => ({
     masking: { ...snap.masking },
     color: { ...snap.color },
     effects: { ...snap.effects },
+    generator: { ...snap.generator },
   }),
 
   setAnimation: (key, value) => set((state) => ({
@@ -179,9 +205,7 @@ export const useStore = create((set) => ({
     masking: { ...state.masking, [key]: value }
   })),
 
-  setFeedback: (key, value) => set((state) => ({
-    feedback: { ...state.feedback, [key]: value }
-  })),
+  // Feedback Removed (Phase 4 Deprecated)
 
   setRecording: (key, value) => set((state) => ({
     recording: { ...state.recording, [key]: value }
@@ -189,6 +213,10 @@ export const useStore = create((set) => ({
 
   setTiling: (key, value) => set((state) => ({
     tiling: { ...state.tiling, [key]: value }
+  })),
+
+  setGenerator: (key, value) => set((state) => ({
+    generator: { ...state.generator, [key]: value }
   })),
 
   setColor: (key, value) => set((state) => ({
@@ -199,16 +227,22 @@ export const useStore = create((set) => ({
     effects: { ...state.effects, [key]: value }
   })),
 
-  resetTransforms: () => set({
+  setCanvas: (key, value) => set((state) => ({
+    canvas: { ...state.canvas, [key]: value }
+  })),
+
+  resetTransforms: () => set((state) => ({
     transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
     symmetry: { enabled: false, slices: 6 },
     warp: { type: 'none' },
     displacement: { amp: 0, freq: 10 },
     masking: { lumaThreshold: 0, centerRadius: 0, invertLuma: false, feather: 0.0 },
-    feedback: { amount: 0 },
+    // feedback: { amount: 0 }, // Removed
     recording: { isActive: false, progress: 0 },
     tiling: { type: 'none', scale: 1.0, overlap: 0.0 },
+    generator: { type: 'none', param1: 50, param2: 50, param3: 50 },
     color: { posterize: 256 },
-    effects: { edgeDetect: false, edgeStrength: 1.0 }
-  })
+    effects: { edgeDetect: 0, invert: 0, solarize: 0, shift: 0 },
+    canvas: { ...state.canvas, width: 1920, height: 1080, aspect: 'video', fit: 'contain', shape: 'rectangle' }
+  }))
 }))

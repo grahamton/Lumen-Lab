@@ -46,8 +46,15 @@ export function useAnimator() {
         posterize: lerp(s1.color.posterize, s2.color.posterize, t),
       },
       effects: {
-        edgeDetect: s1.effects.edgeDetect, // Discrete
-        edgeStrength: lerp(s1.effects.edgeStrength, s2.effects.edgeStrength, t),
+        edgeDetect: lerp(s1.effects.edgeDetect, s2.effects.edgeDetect, t),
+        invert: lerp(s1.effects.invert, s2.effects.invert, t),
+        solarize: lerp(s1.effects.solarize, s2.effects.solarize, t),
+        shift: lerp(s1.effects.shift, s2.effects.shift, t),
+      },
+      generator: {
+        type: s1.generator.type, // Discrete
+        param1: lerp(s1.generator.param1, s2.generator.param1, t),
+        param2: lerp(s1.generator.param2, s2.generator.param2, t),
       }
     }
   }

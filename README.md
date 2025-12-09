@@ -1,55 +1,8 @@
-# Lumen Lab
+# Lumen Lab ⚡
 
-**Lumen Lab** is a digital design station built for textile artists, pattern makers, and visual explorers. It allows you to transform simple images into intricate, endless, and psychedelic tapestries perfect for fabric printing.
+**Lumen Lab** is a real-time visual synthesizer in your browser. It transforms math and images into psychedelic tapestries, organic flows, and intricate mandalas—perfect for VJs, textile artists, and screen printers.
 
-Think of it as a "digital chemistry set" for your art. You start with a single seed image—a photo of a flower, a texture, or a drawing—and using mathematical lenses, you evolve it into complex, seamless patterns that are ready for dye-sublimation or screen printing.
-
-## 🧵 Why use this for Fabric Design?
-
-Creating psychedelic or "trippy" fabrics often involves complex mirroring and geometry (mandalas) combined with organic, fluid distortions. Doing this manually in Photoshop can be slow and technical. Lumen Lab makes this process real-time and playful:
-
-1.  **Instant Mandalas**: Turn any photo into a perfect kaleidoscope instantly.
-2.  **Seamless Repeats**: The "Pattern" feature automatically tiles your design, ensuring it wraps perfectly around the edges for infinite printing.
-3.  **Organic Flow**: Add "melt" and "warp" effects that mimic hydro-dipping or tie-dye aesthetics.
-4.  **Print Ready**: Use "Posterize" to reduce colors for screen printing, or "Neon Edges" for high-contrast rave wear.
-
----
-
-## 🎨 The Toolkit
-
-### 1. Mandala (Symmetry)
-This is your digital kaleidoscope. You can slice your image into wedges and mirror them.
-*   **Use case**: Create the central star or flower of your design.
-*   **Controls**: Adjust the "Points" to go from a simple 4-way mirror to a complex 32-point starburst.
-
-### 2. The Warper (Distortion)
-This tool bends space itself. It takes your straight lines and twists them into spirals or fluid shapes.
-*   **Log-Polar**: Creates a "tunnel" look where the image seems to spiral into itself forever.
-*   **Displacement**: Adds a "liquid" quality, pushing pixels around like wet paint.
-
-### 3. Pattern (Wallpaper Groups)
-**This is the most important tool for textiles.** Once you have a cool design in the center, this feature turns it into an endless wallpaper.
-*   **Grid**: Simple repeat. Good for checking basic spacing.
-*   **Mirror**: Mirrors your design on all four sides. This creates a seamless "carpet" effect where you can't tell where one tile ends and the next begins.
-*   **Spin**: Rotates every other tile, adding variety to the pattern.
-
-### 4. Masks & Edges
-*   **Edge Softness**: Fade the edges of your image or tiles to create a seamless blend.
-*   **Freeze**: Lock the center of your image while the rest moves or distorts.
-
-### 5. Alchemy (Post-Processing)
-Give your design a final stylistic polish.
-*   **Posterize**: Reduce the number of colors. Essential for creating that "vintage screen print" look or simplifying palettes for actual printing.
-*   **Neon Edges**: Turns your image into a glowing outline drawing. Perfect for black-light reactive designs.
-
-### 6. The Time Studio (Animation)
-While fabrics are static, seeing your design move helps you find the perfect "frame" to freeze.
-*   **Video Echo**: Creates trails behind moving parts, adding a sense of motion to still images.
-*   **Loop Recording**: Capture a 3-second seamless video. Great for projecting onto your white fabrics at events!
-
----
-
-## 🚀 How to Start Designing
+## 🚀 Quick Start
 
 1.  **Install & Run**:
     ```bash
@@ -57,20 +10,54 @@ While fabrics are static, seeing your design move helps you find the perfect "fr
     npm run dev
     ```
     Then open `http://localhost:5173`.
+2.  **Projection Mode**: Press **F11** for fullscreen. The canvas adapts to your target ratio (16:9, 1:1, etc) regardless of window size.
 
-2.  **Workflow**:
-    *   **Upload**: Click the upload button to choose your base image. High-contrast textures work best.
-    *   **Mandala**: Turn on "Mandala" to find a central motif.
-    *   **Warp**: Add some "Warping" or "Displacement" to make it look organic.
-    *   **Pattern**: Go to the **Pattern** section and select **Mirror**. Adjust the **Tile Scale** and **Overlap**.
-    *   **Alchemy**: Use **Neon Edges** or **Posterize** to stylize the final look.
-    *   **Capture**: When you see a pattern you love, you can screenshot it for high-res printing or record a loop.
+---
+
+## 🎛️ The Toolkit
+
+### 1. Source (Input)
+Choose your signal.
+*   **Image**: Upload any photo.
+*   **Math (Gen)**: Procedural generators.
+    *   **Fibonacci**: Sunflower spiral (Tunable Density/Zoom).
+    *   **Voronoi**: Cellular noise (Tunable Cells/Size).
+    *   **Grid**: Classic test pattern.
+
+### 2. Geometry
+Mirror and repeat.
+*   **Kaleidoscope**: Slice the world into 2-32 way symmetry.
+*   **Tiling**: Create infinite wallpaper.
+    *   **Grid**: Standard repeat.
+    *   **Spin**: Rotated tiling.
+    *   **Mirror**: Seamless geometric carpet.
+
+### 3. Effects Rack
+Twist and colorize.
+*   **Distortion**: **Tunnel** (Polar) and **Vortex** (Log-Polar) warping.
+*   **Liquify**: Fluid displacement.
+*   **Alchemy**: Post-process sliders (0-100% Intensity).
+    *   **Invert**: Negative film look.
+    *   **Neon Edge**: Glowing contours (Blacklight style).
+    *   **Solarize**: Trippy threshold inversions.
+    *   **Shift**: RGB aberration.
+
+### 4. Visualizer (Snapshots)
+Perform your art.
+*   **Snapshot**: Save the current look.
+*   **Play**: Morph seamlessly between snapshots. Great for live performance.
+
+### 5. Canvas (Output)
+*   **Portal Mode**: Toggle between **Rect** and **Circle** clipping.
+*   **High-Res Export**: Download 4K (3840px) PNGs for print, regardless of screen size.
+
+---
 
 ## 🛠️ Technology
-Built with modern web tech to run fast in your browser.
-*   **React & Vite**: For a snappy interface.
-*   **HTML5 Canvas**: For high-performance pixel manipulation.
-*   **Zustand**: For managing all the knobs and dials.
+*   **React & Vite**: Fast UI.
+*   **HTML5 Canvas**: High-performance 2D rendering.
+*   **Zustand**: State management.
+*   **Lucide React**: Iconography.
 
 ## 📜 License
 MIT

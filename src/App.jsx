@@ -6,7 +6,7 @@ function App() {
   useAnimator()
 
   return (
-    <div className="w-full h-screen bg-neutral-900 overflow-hidden relative">
+    <div className="relative w-screen h-screen overflow-hidden bg-black text-white">
       <Canvas />
       <Controls />
     </div>

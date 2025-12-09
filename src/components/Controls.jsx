@@ -1,40 +1,135 @@
 import React, { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { Upload, RefreshCw, Hexagon, Waves, Zap, EyeOff, Infinity, Grid, Palette, Activity, Dices, Camera, Play, Pause, Trash2, Save, ChevronDown, ChevronRight, Move } from 'lucide-react'
+import { renderCanvas } from '../core/render'
+import { Upload, RefreshCw, Hexagon, Waves, Zap, EyeOff, Infinity, Grid, Palette, Activity, Dices, Camera, Play, Pause, Trash2, Save, ChevronDown, ChevronRight, Move, Download, FileJson, FolderOpen, Sun, Moon, Split, Sliders } from 'lucide-react'
 
 export function Controls() {
-  const { transforms, setTransform, resetTransforms, setImage, symmetry, setSymmetry, warp, setWarp, displacement, setDisplacement, masking, setMasking, feedback, setFeedback, recording, setRecording, tiling, setTiling, color, setColor, effects, setEffects, snapshots, addSnapshot, deleteSnapshot, loadSnapshot, animation, setAnimation, randomize } = useStore()
+  const store = useStore()
+  const { transforms, setTransform, resetTransforms, setImage, symmetry, setSymmetry, warp, setWarp, displacement, setDisplacement, masking, setMasking, recording, setRecording, tiling, setTiling, color, setColor, effects, setEffects, snapshots, addSnapshot, deleteSnapshot, loadSnapshot, animation, setAnimation, randomize } = store
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
-    if (file) {
+    if (!file) return
+
+    try {
+      e.target.value = null
       const reader = new FileReader()
       reader.onload = (event) => {
         const img = new Image()
         img.onload = () => setImage(img)
+        img.onerror = () => alert("Error loading image.")
         img.src = event.target.result
       }
       reader.readAsDataURL(file)
+    } catch (err) {
+      alert("Unexpected error during upload.")
     }
   }
 
+  const loadDemoImage = () => {
+    const img = new Image()
+    img.crossOrigin = "Anonymous"
+    img.onload = () => setImage(img)
+    img.onerror = () => alert("Failed to load demo image.")
+    img.src = "https://picsum.photos/1920/1080"
+  }
+
+  // --- PRO FEATURES (Save/Load/Export) ---
+  const handleSaveProject = () => {
+    const data = {
+      version: 1,
+      timestamp: Date.now(),
+      state: {
+        transforms, symmetry, warp, displacement, masking,
+        tiling, color, effects, snapshots, generator: store.generator
+      }
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `lumen-project-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleLoadProject = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    e.target.value = null
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result)
+        if (data.state) {
+          useStore.setState(data.state)
+        }
+      } catch (err) {
+        alert("Failed to load project file.")
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const handleExportPrint = () => {
+    const { width, height } = store.canvas
+    const targetW = 3840
+    const scale = targetW / width
+    const targetH = Math.round(height * scale)
+
+    const offCanvas = document.createElement('canvas')
+    offCanvas.width = targetW
+    offCanvas.height = targetH
+    const ctx = offCanvas.getContext('2d')
+
+    const exportState = {
+      ...store,
+      canvas: { width: targetW, height: targetH, shape: store.canvas.shape },
+      transforms: {
+        ...transforms,
+        x: transforms.x * scale,
+        y: transforms.y * scale,
+      },
+      displacement: {
+        ...displacement,
+        freq: displacement.freq / scale
+      }
+    }
+
+    const dummyBack = document.createElement('canvas')
+    dummyBack.width = targetW
+    dummyBack.height = targetH
+
+    try {
+      renderCanvas(ctx, dummyBack, targetW, targetH, exportState)
+    } catch (err) {
+      alert("Export failed.")
+      return
+    }
+
+    offCanvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `lumen-print-${Date.now()}.png`
+      a.click()
+      URL.revokeObjectURL(url)
+    }, 'image/png')
+  }
+
+
   return (
-    <div className="fixed top-4 right-4 w-80 bg-neutral-800/90 backdrop-blur-md p-4 rounded-xl border border-neutral-700 shadow-2xl text-sm font-sans select-none z-50 max-h-[90vh] overflow-y-auto custom-scrollbar">
+    <div className="fixed top-4 right-4 w-80 bg-neutral-900/95 backdrop-blur-md p-4 rounded-xl border border-neutral-800 shadow-2xl text-sm font-sans select-none z-50 max-h-[90vh] overflow-y-auto custom-scrollbar">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="font-bold text-neutral-200">Controls</h2>
+        <h2 className="font-bold text-neutral-200 flex items-center gap-2">
+          <Zap size={16} className="text-cyan-400" />
+          Lumen Lab
+        </h2>
         <div className="flex gap-2">
-          {/* Image Upload Button (Small) */}
-          <label className="p-1 hover:bg-neutral-700 rounded-md transition-colors text-neutral-400 hover:text-white cursor-pointer" title="Upload Image">
-            <Upload size={14} />
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-          </label>
-
-          <div className="w-[1px] h-4 bg-neutral-700 mx-1 self-center"></div>
-
-          <button onClick={randomize} className="p-1 hover:bg-neutral-700 rounded-md transition-colors text-purple-400 hover:text-purple-300" title="Randomize (Chaos Button)">
-            <Dices size={18} />
+          <button onClick={randomize} className="p-1.5 hover:bg-neutral-800 rounded-md transition-colors text-purple-400 hover:text-purple-300" title="Randomize All">
+            <Dices size={16} />
           </button>
-          <button onClick={resetTransforms} className="p-1 hover:bg-neutral-700 rounded-md transition-colors text-neutral-400 hover:text-white" title="Reset">
+          <button onClick={resetTransforms} className="p-1.5 hover:bg-neutral-800 rounded-md transition-colors text-neutral-400 hover:text-white" title="Reset All">
             <RefreshCw size={14} />
           </button>
         </div>
@@ -42,119 +137,233 @@ export function Controls() {
 
       <div className="space-y-1">
 
-        {/* Section 1: Affine Transforms */}
-        <Section title="Affine Transforms" icon={<Move size={14} />} defaultOpen={true}>
-          <ControlGroup label="Translation X" value={transforms.x} min={-500} max={500} onChange={(v) => setTransform('x', v)} tooltip="Move the image horizontally." />
-          <ControlGroup label="Translation Y" value={transforms.y} min={-500} max={500} onChange={(v) => setTransform('y', v)} tooltip="Move the image vertically." />
-          <ControlGroup label="Scale" value={transforms.scale} min={0.1} max={3} step={0.01} onChange={(v) => setTransform('scale', v)} tooltip="Zoom in or out." />
-          <ControlGroup label="Rotation" value={Math.round(transforms.rotation * (180 / Math.PI))} min={0} max={360} onChange={(v) => setTransform('rotation', v * (Math.PI / 180))} tooltip="Rotate the image (0-360 degrees)." />
-        </Section>
-
-        {/* Section 2: Mandala (Symmetry) */}
-        <Section title="Mandala" icon={<Hexagon size={14} />}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-neutral-400">Enable</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={symmetry.enabled} onChange={(e) => setSymmetry('enabled', e.target.checked)} className="sr-only peer" />
-              <div className="w-9 h-5 bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
-            </label>
+        {/* 1. Source: The Input Signal */}
+        <Section title="Source (Input)" icon={<Activity size={14} />} defaultOpen={true}>
+          <div className="flex gap-2 mb-3 bg-neutral-800 p-1 rounded-lg">
+            <button
+              onClick={() => store.setGenerator('type', 'none')}
+              className={`text-xs flex-1 py-1.5 rounded-md transition-all font-medium ${store.generator.type === 'none' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}
+            >
+              Image
+            </button>
+            <button
+              onClick={() => store.setGenerator('type', 'fibonacci')}
+              className={`text-xs flex-1 py-1.5 rounded-md transition-all font-medium ${store.generator.type !== 'none' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}
+            >
+              Math (Gen)
+            </button>
           </div>
-          {symmetry.enabled && (
-            <ControlGroup label="Points" value={symmetry.slices} min={2} max={32} step={2} onChange={(v) => setSymmetry('slices', v)} tooltip="Number of kaleidoscope wedges." />
-          )}
-        </Section>
 
-        {/* Section 3: Pattern (Tiling) */}
-        <Section title="Pattern" icon={<Grid size={14} />}>
-          <div className="flex gap-1 mb-2">
-            {['none', 'p1', 'p2', 'p4m'].map((type) => {
-              const labels = { 'none': 'Off', 'p1': 'Grid', 'p2': 'Spin', 'p4m': 'Mirror' }
-              return (
-                <button
-                  key={type}
-                  onClick={() => setTiling('type', type)}
-                  className={`text-xs px-2 py-1 rounded capitalize transition-colors flex-1 ${tiling.type === type
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
-                    }`}
-                >
-                  {labels[type]}
-                </button>
-              )
-            })}
-          </div>
-          {tiling.type !== 'none' && (
-            <>
-              <ControlGroup label="Tile Scale" value={tiling.scale} min={0.1} max={2.0} step={0.01} onChange={(v) => setTiling('scale', v)} tooltip="Size of the repeating pattern." />
-              <ControlGroup label="Overlap" value={tiling.overlap} min={0} max={0.5} step={0.01} onChange={(v) => setTiling('overlap', v)} tooltip="Draw tiles larger than the grid to overlap them." />
-            </>
-          )}
-        </Section>
-
-        {/* Section 4: Distortion */}
-        <Section title="Distortion" icon={<Waves size={14} />}>
-          <div className="flex gap-2 mb-4">
-            {['none', 'polar', 'log-polar'].map((type) => (
+          {store.generator.type === 'none' ? (
+            <div className="space-y-2">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg pointer-events-none" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="block w-full text-[10px] text-neutral-400
+                      file:mr-2 file:py-2 file:px-3
+                      file:rounded-md file:border-0
+                      file:text-[10px] file:font-bold
+                      file:bg-neutral-800 file:text-cyan-500
+                      hover:file:bg-neutral-700
+                      cursor-pointer"
+                />
+              </div>
               <button
-                key={type}
-                onClick={() => setWarp('type', type)}
-                className={`text-xs px-2 py-1 rounded capitalize transition-colors flex-1 ${warp.type === type
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
+                onClick={loadDemoImage}
+                className="text-xs w-full py-1.5 text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-1 justify-center"
+              >
+                <Zap size={10} /> Load Demo Image
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[10px] text-neutral-500 mb-2 px-1">Select a procedural algorithm:</p>
+              <div className="grid grid-cols-3 gap-1 mb-3">
+                {['fibonacci', 'voronoi', 'grid'].map(t => (
+                  <button
+                    key={t}
+                    onClick={() => store.setGenerator('type', t)}
+                    className={`text-[10px] py-2 rounded capitalize border transition-all ${store.generator.type === t ? 'bg-cyan-900/30 text-cyan-200 border-cyan-800' : 'bg-neutral-800 text-neutral-500 border-transparent hover:border-neutral-700'}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-neutral-800/30 p-2 rounded border border-neutral-800 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] text-cyan-400 font-bold uppercase tracking-wider mb-1">
+                  <Sliders size={10} /> Tuning
+                </div>
+                {/* Dynamic Sliders based on Type */}
+                {store.generator.type === 'fibonacci' && (
+                  <>
+                    <ControlGroup label="Density" value={store.generator.param1} min={1} max={100} onChange={(v) => store.setGenerator('param1', v)} />
+                    <ControlGroup label="Zoom" value={store.generator.param2} min={1} max={100} onChange={(v) => store.setGenerator('param2', v)} />
+                  </>
+                )}
+                {store.generator.type === 'voronoi' && (
+                  <>
+                    <ControlGroup label="Cells" value={store.generator.param1} min={1} max={100} onChange={(v) => store.setGenerator('param1', v)} />
+                    <ControlGroup label="Bubble Size" value={store.generator.param2} min={1} max={100} onChange={(v) => store.setGenerator('param2', v)} />
+                  </>
+                )}
+                {store.generator.type === 'grid' && (
+                  <>
+                    <ControlGroup label="Spacing" value={store.generator.param1} min={1} max={100} onChange={(v) => store.setGenerator('param1', v)} />
+                    <ControlGroup label="Thickness" value={store.generator.param2} min={1} max={100} onChange={(v) => store.setGenerator('param2', v)} />
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* 2. Canvas: The Output Shape */}
+        <Section title="Canvas (Output)" icon={<Move size={14} />} defaultOpen={true}>
+          <div className="flex items-center justify-between text-xs mb-3">
+            <span className="text-neutral-400">Portal Mode</span>
+            <div className="flex bg-neutral-800 rounded p-0.5">
+              <button
+                onClick={() => store.setCanvas('shape', 'rectangle')}
+                className={`px-3 py-1 rounded transition-colors ${store.canvas.shape !== 'circle' ? 'bg-neutral-600 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                Rect
+              </button>
+              <button
+                onClick={() => store.setCanvas('shape', 'circle')}
+                className={`px-3 py-1 rounded transition-colors ${store.canvas.shape === 'circle' ? 'bg-cyan-600 text-white shadow-[0_0_10px_rgba(8,145,178,0.5)]' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                Circle
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1 mb-2">
+            {[
+              { id: 'video', label: '16:9' },
+              { id: 'portrait', label: '9:16' },
+              { id: 'square', label: '1:1' },
+              { id: 'free', label: 'Full' }
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  const { setCanvas } = useStore.getState()
+                  setCanvas('aspect', opt.id)
+                  if (opt.id === 'video') { setCanvas('width', 1920); setCanvas('height', 1080) }
+                  if (opt.id === 'portrait') { setCanvas('width', 1080); setCanvas('height', 1920) }
+                  if (opt.id === 'square') { setCanvas('width', 1080); setCanvas('height', 1080) }
+                  if (opt.id === 'free') { setCanvas('width', window.innerWidth); setCanvas('height', window.innerHeight) }
+                }}
+                className={`text-[10px] py-1 rounded transition-colors ${store.canvas.aspect === opt.id
+                  ? 'bg-neutral-700 text-white'
+                  : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'
                   }`}
               >
-                {type}
+                {opt.label}
               </button>
             ))}
           </div>
-          <div className="border-t border-neutral-700 pt-3">
-            <h4 className="text-xs font-bold text-neutral-500 mb-2 uppercase">Displacement</h4>
-            <ControlGroup label="Flow Strength" value={displacement.amp} min={0} max={100} onChange={(v) => setDisplacement('amp', v)} tooltip="Amount of liquid distortion." />
-            <ControlGroup label="Frequency" value={displacement.freq} min={1} max={50} onChange={(v) => setDisplacement('freq', v)} tooltip="Density of the ripples." />
+        </Section>
+
+        {/* 3. Transform & Geometry */}
+        <Section title="Geometry" icon={<Hexagon size={14} />}>
+          <ControlGroup label="Scale" value={transforms.scale} min={0.1} max={3} step={0.01} onChange={(v) => setTransform('scale', v)} />
+          <ControlGroup label="Rotation" value={Math.round(transforms.rotation * (180 / Math.PI))} min={0} max={360} onChange={(v) => setTransform('rotation', v * (Math.PI / 180))} />
+
+          <div className="border-t border-neutral-800 my-2 pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-neutral-400">Kaleidoscope</span>
+            </div>
+            {/* No Toggle - Just a slider. If < variable slice count? Use 'enabled' state derived logic implicitly in render or just keep enabled on?
+                 User wanted toggle gone. Let's make slider min 0, where 0/1/2 = off.
+                 Since store has 'enabled', let's toggle enabled based on slice count or just force enabled in slider change?
+                 Simpler: Keep 'enabled' valid, but hook it to the slider? No, slider range 2-32.
+                 Let's keep the slider range, but also bring back the toggle because Render needs explicit OFF often.
+                 Wait, user said "Hidden behind a toggle was not great".
+                 Let's make toggle prominent as a button group? Or just toggle 'enabled' to true if user slides the slider?
+                 Let's do: Toggle Button Group [Off] [On] next to header.
+             */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] text-neutral-500 uppercase">Mode</span>
+              <div className="flex bg-neutral-800 rounded p-0.5">
+                <button onClick={() => setSymmetry('enabled', false)} className={`px-2 py-0.5 rounded text-[10px] ${!symmetry.enabled ? 'bg-neutral-600 text-white' : 'text-neutral-500'}`}>Off</button>
+                <button onClick={() => setSymmetry('enabled', true)} className={`px-2 py-0.5 rounded text-[10px] ${symmetry.enabled ? 'bg-cyan-600 text-white' : 'text-neutral-500'}`}>On</button>
+              </div>
+            </div>
+
+            {symmetry.enabled && (
+              <ControlGroup label="Slices" value={symmetry.slices} min={2} max={32} step={2} onChange={(v) => setSymmetry('slices', v)} />
+            )}
+          </div>
+
+          <div className="border-t border-neutral-800 my-2 pt-2">
+            <div className="flex gap-1 mb-2">
+              {['none', 'p1', 'p2', 'p4m'].map((type) => {
+                const labels = { 'none': 'Off', 'p1': 'Grid', 'p2': 'Spin', 'p4m': 'Mirror' }
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setTiling('type', type)}
+                    className={`text-[10px] py-1 px-2 rounded capitalize transition-colors flex-1 ${tiling.type === type ? 'bg-cyan-700 text-white' : 'bg-neutral-800 text-neutral-500'}`}
+                  >
+                    {labels[type]}
+                  </button>
+                )
+              })}
+            </div>
+            {tiling.type !== 'none' && (
+              <ControlGroup label="Grid Scale" value={tiling.scale} min={0.1} max={2.0} step={0.01} onChange={(v) => setTiling('scale', v)} />
+            )}
           </div>
         </Section>
 
-        {/* Section 5: Masks & Edges */}
-        <Section title="Masks & Edges" icon={<EyeOff size={14} />}>
-          <ControlGroup label="Edge Softness" value={masking.feather} min={0} max={0.5} step={0.01} onChange={(v) => setMasking('feather', v)} tooltip="Softness of the image/tile edges." />
-          <ControlGroup label="Video Echo" value={feedback.amount} min={0} max={99} onChange={(v) => setFeedback('amount', v)} tooltip="Trails (Feedback)." />
+        {/* 4. Effects (Renamed & Refined) */}
+        <Section title="Effects Rack" icon={<Waves size={14} />}>
+          <div className="mb-2">
+            <span className="text-[10px] uppercase font-bold text-neutral-600 mb-1 block">Distortion</span>
+            <div className="flex gap-1 mb-2">
+              {[
+                { id: 'none', label: 'None' },
+                { id: 'polar', label: 'Tunnel' },
+                { id: 'log-polar', label: 'Vortex' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setWarp('type', opt.id)}
+                  className={`text-[10px] py-1 px-2 rounded capitalize flex-1 ${warp.type === opt.id ? 'bg-purple-600 text-white' : 'bg-neutral-800 text-neutral-500'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <ControlGroup label="Liquify Intensity" value={displacement.amp} min={0} max={200} onChange={(v) => setDisplacement('amp', v)} />
+          </div>
 
-          <div className="border-t border-neutral-700 pt-3 mt-3">
-            <ControlGroup label="Center Radius" value={masking.centerRadius} min={0} max={100} onChange={(v) => setMasking('centerRadius', v)} tooltip="Freeze center (Radius %)." />
-            <ControlGroup label="Luma Key" value={masking.lumaThreshold} min={0} max={100} onChange={(v) => setMasking('lumaThreshold', v)} tooltip="Freeze based on brightness." />
-            <label className="flex items-center gap-2 text-xs text-neutral-400 mt-2 cursor-pointer hover:text-white transition-colors">
-              <input type="checkbox" checked={masking.invertLuma} onChange={(e) => setMasking('invertLuma', e.target.checked)} className="rounded bg-neutral-600 border-neutral-500 text-cyan-500 focus:ring-0" />
-              <span>Invert Luma Key</span>
-            </label>
+          <div className="border-t border-neutral-800 pt-2 grid grid-cols-1 gap-1">
+            <span className="text-[10px] uppercase font-bold text-neutral-600 mb-1 block">Alchemy</span>
+            <ControlGroup label="Invert" value={effects.invert} min={0} max={100} onChange={(v) => setEffects('invert', v)} />
+            <ControlGroup label="Neon Edge" value={effects.edgeDetect} min={0} max={100} onChange={(v) => setEffects('edgeDetect', v)} />
+            <ControlGroup label="Solarize" value={effects.solarize} min={0} max={100} onChange={(v) => setEffects('solarize', v)} />
+            <ControlGroup label="Shift" value={effects.shift} min={0} max={100} onChange={(v) => setEffects('shift', v)} />
           </div>
         </Section>
 
-        {/* Section 6: Alchemy */}
-        <Section title="Alchemy" icon={<Palette size={14} />}>
-          <ControlGroup label="Posterize" value={color.posterize} min={2} max={32} step={1} onChange={(v) => setColor('posterize', v)} tooltip="Reduce color palette." />
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-neutral-400 flex items-center gap-2">
-              <Activity size={12} /> Neon Edges
-            </span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={effects.edgeDetect} onChange={(e) => setEffects('edgeDetect', e.target.checked)} className="sr-only peer" />
-              <div className="w-9 h-5 bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-            </label>
-          </div>
-        </Section>
-
-        {/* Section 7: Visualizer */}
-        <Section title="Visualizer" icon={<Camera size={14} />}>
+        {/* 5. Visualizer (Restored & Highlighted) */}
+        <Section title="Visualizer (Snapshots)" icon={<Camera size={14} />} defaultOpen={true}>
           <div className="flex gap-2 mb-3">
             <button
               onClick={addSnapshot}
-              className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-white rounded p-2 text-xs flex items-center justify-center gap-2 transition-colors"
+              className="flex-1 bg-cyan-900/50 hover:bg-cyan-800 text-cyan-100 border border-cyan-800 hover:border-cyan-500 rounded p-2 text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
             >
               <Save size={14} /> Snapshot
             </button>
             <button
               onClick={() => setAnimation('isPlaying', !animation.isPlaying)}
-              className={`flex-1 rounded p-2 text-xs flex items-center justify-center gap-2 transition-colors ${animation.isPlaying ? 'bg-green-600 text-white' : 'bg-neutral-700 hover:bg-neutral-600 text-white'}`}
+              className={`flex-1 rounded p-2 text-xs flex items-center justify-center gap-2 transition-colors border ${animation.isPlaying ? 'bg-green-900/50 text-green-100 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)] animate-pulse' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}`}
             >
               {animation.isPlaying ? <Pause size={14} /> : <Play size={14} />}
               {animation.isPlaying ? 'Stop' : 'Play'}
@@ -162,16 +371,16 @@ export function Controls() {
           </div>
 
           {snapshots.length > 0 && (
-            <div className="space-y-2 mb-3 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+            <div className="space-y-2 mb-3 max-h-32 overflow-y-auto pr-1 custom-scrollbar bg-black/20 p-2 rounded-lg border border-neutral-800">
               {snapshots.map((snap, idx) => (
-                <div key={snap.id} className="flex items-center justify-between bg-neutral-900/50 p-2 rounded text-xs group">
+                <div key={snap.id} className="flex items-center justify-between bg-neutral-900/80 p-2 rounded text-xs group hover:bg-neutral-800 transition-colors cursor-pointer border border-transparent hover:border-neutral-600">
                   <span
                     onClick={() => loadSnapshot(snap)}
-                    className="cursor-pointer hover:text-cyan-400 transition-colors truncate w-full"
+                    className="truncate w-full hover:text-cyan-400"
                   >
                     Snapshot {idx + 1}
                   </span>
-                  <button onClick={() => deleteSnapshot(idx)} className="text-neutral-500 hover:text-red-400 pl-2">
+                  <button onClick={(e) => { e.stopPropagation(); deleteSnapshot(idx) }} className="text-neutral-600 hover:text-red-400 pl-2">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -179,24 +388,55 @@ export function Controls() {
             </div>
           )}
 
-          <ControlGroup label="Morph Speed (ms)" value={animation.duration} min={500} max={10000} step={100} onChange={(v) => setAnimation('duration', v)} tooltip="Time to transition between snapshots." />
-          <div className="flex items-center justify-between mt-2 text-xs text-neutral-400">
-            <span>Mode</span>
-            <div className="flex bg-neutral-700 rounded p-0.5">
-              {['loop', 'pingpong'].map(m => (
-                <button
-                  key={m}
-                  onClick={() => setAnimation('mode', m)}
-                  className={`px-2 py-0.5 rounded capitalize transition-colors ${animation.mode === m ? 'bg-cyan-600 text-white' : 'hover:text-white'}`}
-                >
-                  {m}
-                </button>
-              ))}
+          <div className="bg-neutral-800/50 p-2 rounded-lg">
+            <ControlGroup label="Morph Speed (ms)" value={animation.duration} min={500} max={10000} step={100} onChange={(v) => setAnimation('duration', v)} />
+            <div className="flex items-center justify-between mt-2 text-xs text-neutral-400">
+              <span>Mode</span>
+              <div className="flex bg-neutral-900 rounded p-0.5 border border-neutral-800">
+                {['loop', 'pingpong'].map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setAnimation('mode', m)}
+                    className={`px-2 py-0.5 rounded capitalize transition-colors ${animation.mode === m ? 'bg-neutral-700 text-white' : 'hover:text-white'}`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </Section>
 
+        {/* 6. Project & Export */}
+        <Section title="Project & Export" icon={<FolderOpen size={14} />}>
+          <div className="flex gap-2 mb-2">
+            <button onClick={handleSaveProject} className="flex-1 bg-neutral-800 hover:bg-neutral-700 py-2 rounded text-xs flex items-center justify-center gap-2 text-neutral-300">
+              <Save size={12} /> Save
+            </button>
+            <label className="flex-1 bg-neutral-800 hover:bg-neutral-700 py-2 rounded text-xs flex items-center justify-center gap-2 cursor-pointer text-neutral-300">
+              <FolderOpen size={12} /> Load
+              <input type="file" accept=".json" onChange={handleLoadProject} className="hidden" />
+            </label>
+          </div>
+          <button onClick={handleExportPrint} className="w-full bg-neutral-100 hover:bg-white text-black py-2 rounded text-xs flex items-center justify-center gap-2 font-bold shadow-lg shadow-white/10">
+            <Download size={14} /> Export 4K Image
+          </button>
+        </Section>
       </div>
+    </div>
+  )
+}
+
+function Toggle({ label, icon, checked, onChange, color = "peer-checked:bg-cyan-600" }) {
+  return (
+    <div className="flex items-center justify-between bg-neutral-900/40 p-2 rounded border border-neutral-700/50">
+      <span className="text-xs text-neutral-400 flex items-center gap-2">
+        {icon} {label}
+      </span>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only peer" />
+        <div className={`w-7 h-4 bg-neutral-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all ${color}`}></div>
+      </label>
     </div>
   )
 }
