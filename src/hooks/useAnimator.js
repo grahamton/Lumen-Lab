@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '../store/useStore'
 
 export function useAnimator() {
@@ -12,7 +12,7 @@ export function useAnimator() {
   const lerp = (start, end, t) => start * (1 - t) + end * t
 
   // Deep Lerp for our state object
-  const interpolateState = (s1, s2, t) => {
+  const interpolateState = useCallback((s1, s2, t) => {
     return {
       transforms: {
         x: lerp(s1.transforms.x, s2.transforms.x, t),
@@ -57,10 +57,10 @@ export function useAnimator() {
         param2: lerp(s1.generator.param2, s2.generator.param2, t),
       }
     }
-  }
+  }, [])
 
   // Easing Functions
-  const easings = {
+  const easings = useMemo(() => ({
     linear: t => t,
     easeInOut: t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
     elastic: t => {
@@ -74,11 +74,11 @@ export function useAnimator() {
       else if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375
       else return n1 * (t -= 2.625 / d1) * t + 0.984375
     }
-  }
+  }), [])
 
-  const animate = (time) => {
+  const animate = useCallback(function animateFrame(time) {
     if (!animation.isPlaying || snapshots.length < 2) {
-      requestRef.current = requestAnimationFrame(animate)
+      requestRef.current = requestAnimationFrame(animateFrame)
       return
     }
 
@@ -124,11 +124,11 @@ export function useAnimator() {
       }
     }
 
-    requestRef.current = requestAnimationFrame(animate)
-  }
+    requestRef.current = requestAnimationFrame(animateFrame)
+  }, [animation.duration, animation.easing, animation.holdTime, animation.isPlaying, animation.mode, easings, interpolateState, loadSnapshot, snapshots])
 
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(requestRef.current)
-  }, [animation.isPlaying, animation.mode, animation.duration, snapshots.length]) // Re-bind if settings change
+  }, [animate]) // Re-bind if settings change
 }

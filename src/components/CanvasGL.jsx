@@ -1,4 +1,5 @@
-import React, { useRef, useMemo, useEffect } from 'react'
+/* eslint-disable react-hooks/immutability */
+import React, { useRef, useMemo, useEffect, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore } from '../store/useStore'
@@ -17,16 +18,13 @@ function VisualizerScene() {
   const timeRef = useRef(0) // Accumulate time manually
   const imageAspect = useRef(1) // Track image aspect ratio
 
-  // Create Texture once
-  const texture = useMemo(() => {
+  const [texture] = useState(() => {
     const t = new THREE.Texture()
-    // Default black texture
     t.image = new Image()
     return t
-  }, [])
+  })
 
-  // Uniforms
-  const uniforms = useMemo(() => ({
+  const [uniforms] = useState(() => ({
     uTexture: { value: texture },
     uResolution: { value: new THREE.Vector2(size.width, size.height) },
     uAspect: { value: size.width / size.height },
@@ -44,66 +42,70 @@ function VisualizerScene() {
     uEffects: { value: new THREE.Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
     uGenType: { value: 0 },
     uGenParams: { value: new THREE.Vector3(50, 50, 50) }
-  }), []) // Empty deps, mutable
+  }))
 
   // Sync Texture when image changes
   useEffect(() => {
-    if (image && image.complete) {
-      texture.image = image
-      texture.needsUpdate = true
-      // Update Aspect Ratio
-      if (image.naturalHeight > 0) {
-        imageAspect.current = image.naturalWidth / image.naturalHeight
-        uniforms.uImageAspect.value = imageAspect.current
-      }
+    if (!image || !image.complete) return
+
+    const uniformValues = uniforms
+
+    texture.image = image
+    texture.needsUpdate = true
+    // Update Aspect Ratio
+    if (image.naturalHeight > 0) {
+      imageAspect.current = image.naturalWidth / image.naturalHeight
+      uniformValues.uImageAspect.value = imageAspect.current
     }
   }, [image, texture, uniforms])
 
   // Resize Handler
   useEffect(() => {
-    uniforms.uResolution.value.set(size.width, size.height)
-    uniforms.uAspect.value = size.width / size.height
+    const uniformValues = uniforms
+    uniformValues.uResolution.value.set(size.width, size.height)
+    uniformValues.uAspect.value = size.width / size.height
   }, [size, uniforms])
 
   // Render Loop (60FPS)
   useFrame((stateThree, delta) => {
+    const uniformValues = uniforms
     const {
       transforms, symmetry, warp, displacement, tiling,
-      color, effects, generator, animation
+      color, effects, generator
     } = useStore.getState() // Access fresh state without re-render
 
     // Flux Time Logic
     if (fluxEnabled) {
       timeRef.current += delta
     }
-    uniforms.uTime.value = timeRef.current
+    uniformValues.uTime.value = timeRef.current
 
     // Update Shape Uniform
-    uniforms.uShape.value = shape === 'circle' ? 1 : 0
+    uniformValues.uShape.value = shape === 'circle' ? 1 : 0
 
     // Sync Uniforms
-    uniforms.uTransforms.value.set(
+    uniformValues.uTransforms.value.set(
       transforms.x,
       transforms.y,
       transforms.scale,
       transforms.rotation
     )
 
-    uniforms.uSymEnabled.value = symmetry.enabled
-    uniforms.uSymSlices.value = symmetry.slices
+    uniformValues.uSymEnabled.value = symmetry.enabled
+    uniformValues.uSymSlices.value = symmetry.slices
 
     const warpMap = { 'none': 0, 'polar': 1, 'log-polar': 2 }
-    uniforms.uWarpType.value = warpMap[warp.type] || 0
+    uniformValues.uWarpType.value = warpMap[warp.type] || 0
 
-    uniforms.uDisplacement.value.set(displacement.amp, displacement.freq)
+    uniformValues.uDisplacement.value.set(displacement.amp, displacement.freq)
 
     const tileMap = { 'none': 0, 'p1': 1, 'p2': 2, 'p4m': 3 }
-    uniforms.uTilingType.value = tileMap[tiling.type] || 0
-    uniforms.uTilingScale.value = tiling.scale
+    uniformValues.uTilingType.value = tileMap[tiling.type] || 0
+    uniformValues.uTilingScale.value = tiling.scale
 
-    uniforms.uPosterize.value = color.posterize
+    uniformValues.uPosterize.value = color.posterize
 
-    uniforms.uEffects.value.set(
+    uniformValues.uEffects.value.set(
       effects.edgeDetect,
       effects.invert,
       effects.solarize,
@@ -111,39 +113,39 @@ function VisualizerScene() {
     )
 
     const genMap = { 'none': 0, 'fibonacci': 1, 'voronoi': 2, 'grid': 3 }
-    uniforms.uGenType.value = genMap[generator.type] || 0
-    uniforms.uGenType.value = genMap[generator.type] || 0
-    uniforms.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
+    uniformValues.uGenType.value = genMap[generator.type] || 0
+    uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
   })
 
   // Export Request Handler
   useEffect(() => {
     if (exportRequest) {
       const { width, height, filename } = exportRequest
+      const uniformValues = uniforms
 
       // Force refresh uniforms for export frame
       const { transforms, symmetry, warp, displacement, tiling, color, effects, generator } = useStore.getState()
-      uniforms.uTransforms.value.set(transforms.x, transforms.y, transforms.scale, transforms.rotation)
-      uniforms.uSymEnabled.value = symmetry.enabled
-      uniforms.uSymSlices.value = symmetry.slices
+      uniformValues.uTransforms.value.set(transforms.x, transforms.y, transforms.scale, transforms.rotation)
+      uniformValues.uSymEnabled.value = symmetry.enabled
+      uniformValues.uSymSlices.value = symmetry.slices
       const warpMap = { 'none': 0, 'polar': 1, 'log-polar': 2 }
-      uniforms.uWarpType.value = warpMap[warp.type] || 0
-      uniforms.uDisplacement.value.set(displacement.amp, displacement.freq)
+      uniformValues.uWarpType.value = warpMap[warp.type] || 0
+      uniformValues.uDisplacement.value.set(displacement.amp, displacement.freq)
       const tileMap = { 'none': 0, 'p1': 1, 'p2': 2, 'p4m': 3 }
-      uniforms.uTilingType.value = tileMap[tiling.type] || 0
-      uniforms.uTilingScale.value = tiling.scale
-      uniforms.uPosterize.value = color.posterize
-      uniforms.uEffects.value.set(effects.edgeDetect, effects.invert, effects.solarize, effects.shift)
+      uniformValues.uTilingType.value = tileMap[tiling.type] || 0
+      uniformValues.uTilingScale.value = tiling.scale
+      uniformValues.uPosterize.value = color.posterize
+      uniformValues.uEffects.value.set(effects.edgeDetect, effects.invert, effects.solarize, effects.shift)
       const genMap = { 'none': 0, 'fibonacci': 1, 'voronoi': 2, 'grid': 3 }
-      uniforms.uGenType.value = genMap[generator.type] || 0
-      uniforms.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
+      uniformValues.uGenType.value = genMap[generator.type] || 0
+      uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
 
       // Resize
       const originalSize = new THREE.Vector2()
       gl.getSize(originalSize)
       gl.setSize(width, height)
-      uniforms.uResolution.value.set(width, height)
-      uniforms.uAspect.value = width / height
+      uniformValues.uResolution.value.set(width, height)
+      uniformValues.uAspect.value = width / height
 
       // Render
       gl.render(gl.scene, gl.camera)
@@ -159,12 +161,12 @@ function VisualizerScene() {
 
         // Reset
         gl.setSize(originalSize.x, originalSize.y)
-        uniforms.uResolution.value.set(originalSize.x, originalSize.y)
-        uniforms.uAspect.value = originalSize.x / originalSize.y
+        uniformValues.uResolution.value.set(originalSize.x, originalSize.y)
+        uniformValues.uAspect.value = originalSize.x / originalSize.y
         triggerExport(null) // Clear request
       }, 'image/png')
     }
-  }, [exportRequest, gl, uniforms, triggerExport])
+  }, [exportRequest, gl, triggerExport, uniforms])
 
   return (
     <mesh ref={meshRef}>

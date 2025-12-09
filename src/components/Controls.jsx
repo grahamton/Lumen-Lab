@@ -31,20 +31,17 @@ export function Controls() {
   const store = useStore()
   const {
     ui, toggleControls, // UI State
-    image, setImage,
+    setImage,
     transforms, setTransform,
     symmetry, setSymmetry,
     warp, setWarp,
     displacement, setDisplacement,
     tiling, setTiling,
-    masking, setMasking,
-    recording, setRecording,
-    generator, setGenerator,
+    masking,
     color, setColor,
     effects, setEffects,
     snapshots, addSnapshot, deleteSnapshot, loadSnapshot,
     animation, setAnimation,
-    randomize, resetTransforms,
     toggleHelp
   } = useStore()
 
@@ -76,6 +73,7 @@ export function Controls() {
       }
       reader.readAsDataURL(file)
     } catch (err) {
+      console.error(err)
       alert("Unexpected error during upload.")
     }
   }
@@ -118,6 +116,7 @@ export function Controls() {
           useStore.setState(data.state)
         }
       } catch (err) {
+        console.error(err)
         alert("Failed to load project file.")
       }
     }

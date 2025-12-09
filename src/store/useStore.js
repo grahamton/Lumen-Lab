@@ -94,7 +94,6 @@ export const useStore = create((set) => ({
     controlsOpen: true,
   },
 
-  toggleHelp: (isOpen) => set((state) => ({ ui: { ...state.ui, helpOpen: isOpen } })),
   toggleControls: (isOpen) => set((state) => ({ ui: { ...state.ui, controlsOpen: isOpen } })),
 
   recording: { isActive: false, progress: 0 },
