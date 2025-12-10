@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
+import { presets } from '../presets'
 import {
   Zap, Sliders, Layers, Move, Hexagon, Waves, Activity, FolderOpen,
   RefreshCw, Dices, ChevronDown, ChevronRight, Download, Save, Trash2, HelpCircle,
@@ -59,10 +60,31 @@ export function Controls() {
   // Global Hotkeys
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Ignore if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+
       // TAB to toggle UI
       if (e.key === 'Tab') {
         e.preventDefault()
         toggleControls(!ui.controlsOpen)
+      }
+
+      // SPACE: Play/Pause
+      if (e.code === 'Space') {
+        e.preventDefault()
+        const { animation, setAnimation } = useStore.getState()
+        setAnimation('isPlaying', !animation.isPlaying)
+      }
+
+      // R: Record
+      if (e.key.toLowerCase() === 'r') {
+        const { recording, setRecording } = useStore.getState()
+        setRecording('isActive', !recording.isActive)
+      }
+
+      // S: Snapshot
+      if (e.key.toLowerCase() === 's') {
+        useStore.getState().addSnapshot()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -212,6 +234,24 @@ export function Controls() {
             <button onClick={() => store.setGenerator('type', 'none')} className={`text-xs flex-1 py-1.5 rounded-md transition-all font-medium ${store.generator.type === 'none' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}>Image</button>
             <button onClick={() => store.setGenerator('type', 'fibonacci')} className={`text-xs flex-1 py-1.5 rounded-md transition-all font-medium ${store.generator.type !== 'none' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}>Math (Gen)</button>
           </div>
+
+          {/* Preset Loader */}
+          <div className="mb-3">
+            <select
+              className="w-full bg-neutral-800 text-[10px] text-neutral-400 p-1.5 rounded border border-neutral-700 outline-none hover:border-neutral-500 transition-colors"
+              onChange={(e) => {
+                const idx = e.target.value
+                if (idx !== "") {
+                  useStore.setState(presets[idx].state)
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>Load Preset...</option>
+              {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
+            </select>
+          </div>
+
           {store.generator.type === 'none' ? (
             <div className="space-y-2">
               <div className="relative group">
@@ -327,10 +367,14 @@ export function Controls() {
         >
           <div className="flex gap-2 mb-3">
             <button
-              onClick={addSnapshot}
-              className="bg-cyan-900/50 hover:bg-cyan-800 text-cyan-200 border border-cyan-700/50 py-2 px-3 rounded text-xs flex-1 flex items-center justify-center gap-2"
+              onClick={() => store.setRecording('isActive', !store.recording.isActive)}
+              className={`py-2 px-3 rounded text-xs flex-1 flex items-center justify-center gap-2 border transition-all ${store.recording.isActive
+                ? 'bg-red-600 text-white border-red-500 animate-pulse'
+                : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700'
+                }`}
             >
-              <Camera size={14} /> Snapshot
+              <div className={`w-2 h-2 rounded-full ${store.recording.isActive ? 'bg-white' : 'bg-red-500'}`} />
+              {store.recording.isActive ? `${(store.recording.progress / 1000).toFixed(1)}s` : 'Record'}
             </button>
             <button
               onClick={() => store.setFlux('enabled', !store.flux.enabled)}
@@ -340,6 +384,14 @@ export function Controls() {
                 }`}
             >
               <Activity size={14} /> Flux
+            </button>
+          </div>
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={addSnapshot}
+              className="bg-cyan-900/50 hover:bg-cyan-800 text-cyan-200 border border-cyan-700/50 py-2 px-3 rounded text-xs flex-1 flex items-center justify-center gap-2"
+            >
+              <Camera size={14} /> Snapshot
             </button>
             <button
               onClick={() => setAnimation('isPlaying', !animation.isPlaying)}

@@ -3,20 +3,50 @@ import React, { useRef, useMemo, useEffect, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore } from '../store/useStore'
+import { useVideoRecorder } from '../hooks/useVideoRecorder'
 import vertShader from '../shaders/visualizer.vert?raw'
 import fragShader from '../shaders/visualizer.frag?raw'
 
 // The Inner Scene
 function VisualizerScene() {
   const meshRef = useRef()
+  // Store Subscriptions
   const image = useStore((state) => state.image)
   const exportRequest = useStore((state) => state.ui.exportRequest)
   const triggerExport = useStore((state) => state.triggerExport)
-  const fluxEnabled = useStore((state) => state.flux.enabled) // Flux subscription
-  const shape = useStore((state) => state.canvas.shape) // Subscribe to shape
+  const fluxEnabled = useStore((state) => state.flux.enabled)
+  const shape = useStore((state) => state.canvas.shape)
+  // Recording State from Store (Triggers)
+  const recordingState = useStore((state) => state.recording)
+  const setRecording = useStore((state) => state.setRecording)
+
   const { gl, size } = useThree()
-  const timeRef = useRef(0) // Accumulate time manually
-  const imageAspect = useRef(1) // Track image aspect ratio
+  const timeRef = useRef(0)
+  const imageAspect = useRef(1)
+
+  // Video Recorder Hook
+  const { isRecording, duration, startRecording, stopRecording } = useVideoRecorder(gl)
+
+  // Sync Store -> Recorder (Start/Stop trigger)
+  // We use a "request" pattern or simply check mapped state?
+  // Let's assume UI toggles store.recording.isActive, but that might create a loop.
+  // Better: UI calls store.toggleRecording(), which sets a specific flag or we handle it here.
+  // Actually, simpler: Let the UI set `isActive` to true/false, and we react here.
+  useEffect(() => {
+    if (recordingState.isActive && !isRecording) {
+      startRecording()
+    } else if (!recordingState.isActive && isRecording) {
+      stopRecording()
+    }
+  }, [recordingState.isActive, isRecording, startRecording, stopRecording])
+
+  // Sync Timer -> Store (for UI display)
+  useEffect(() => {
+    if (isRecording) {
+      setRecording('progress', duration)
+    }
+  }, [duration, isRecording, setRecording])
+
 
   const [texture] = useState(() => {
     const t = new THREE.Texture()
@@ -24,6 +54,7 @@ function VisualizerScene() {
     return t
   })
 
+  // ... (rest of uniforms initialization)
   const [uniforms] = useState(() => ({
     uTexture: { value: texture },
     uResolution: { value: new THREE.Vector2(size.width, size.height) },
@@ -44,6 +75,7 @@ function VisualizerScene() {
     uGenParams: { value: new THREE.Vector3(50, 50, 50) }
   }))
 
+  // ... (rest of useEffects)
   // Sync Texture when image changes
   useEffect(() => {
     if (!image || !image.complete) return
@@ -187,11 +219,6 @@ export function CanvasGL() {
   const { canvas } = useStore()
 
   // Calculate viewport style (Letterboxing)
-  // Re-use logic or simplify?
-  // Fiber handles resizing nicely if parent size is constrained.
-  // We can just set div size.
-
-  // Basic Aspect Ratio style
   const style = useMemo(() => {
     if (canvas.aspect === 'free') return { width: '100%', height: '100%' }
 
@@ -203,20 +230,18 @@ export function CanvasGL() {
     } else {
       return { width: '100vw', height: `${100 * windowAspect / targetAspect}vh`, transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }
     }
-  }, [canvas.width, canvas.height, canvas.aspect]) // Primitive check? width/height changes?
-
-  // Note: For perf, we might want to debounce resize calcs or just use strict CSS centered.
+  }, [canvas.width, canvas.height, canvas.aspect])
 
   return (
     <div className="w-full h-full bg-neutral-900 flex items-center justify-center overflow-hidden relative">
       <div style={{ ...style, position: 'relative' }}>
         <Canvas
           gl={{
-            preserveDrawingBuffer: true, // Needed for Export
+            preserveDrawingBuffer: true, // Needed for Export & Recording
             antialias: false,
             powerPreference: "high-performance"
           }}
-          camera={{ position: [0, 0, 1] }} // Dummy cam, shader uses raw coords
+          camera={{ position: [0, 0, 1] }}
         >
           <VisualizerScene />
         </Canvas>
