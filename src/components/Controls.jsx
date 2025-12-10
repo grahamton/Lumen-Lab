@@ -6,17 +6,68 @@ import {
   Camera, Play, Pause, PanelLeftClose, Maximize, Minimize
 } from 'lucide-react'
 
-// ... (ControlGroup component)
+function ControlGroup({ label, value, min, max, step = 1, onChange, children, isCore = false }) {
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between items-center mb-1">
+        <label className={`text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 ${isCore ? 'text-cyan-400' : 'text-neutral-400'}`}>
+          {label}
+          {isCore && <span className="w-1 h-1 rounded-full bg-cyan-400 shadow-[0_0_5px_rgba(34,211,238,0.8)]"></span>}
+        </label>
+        <span className="text-[10px] text-neutral-500 font-mono">{Number(value).toFixed(step < 1 ? 2 : 0)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className={`w-full h-1 rounded-lg appearance-none cursor-pointer ${isCore ? 'bg-neutral-600 accent-cyan-400' : 'bg-neutral-700 accent-neutral-400 hover:accent-neutral-300'}`}
+      />
+      {children}
+    </div>
+  )
+}
 
 export function Controls() {
   const [isFullscreen, setIsFullscreen] = useState(false)
-  // ... (Store destructuring)
+  const store = useStore()
+  const {
+    ui, toggleControls,
+    setImage,
+    transforms, setTransform,
+    symmetry, setSymmetry,
+    warp, setWarp,
+    displacement, setDisplacement,
+    tiling, setTiling,
+    masking,
+    color, setColor,
+    effects, setEffects,
+    snapshots, addSnapshot, deleteSnapshot, loadSnapshot,
+    animation, setAnimation,
+    toggleHelp,
+    resetState
+  } = useStore()
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement)
     document.addEventListener('fullscreenchange', handleFsChange)
     return () => document.removeEventListener('fullscreenchange', handleFsChange)
   }, [])
+
+  // Global Hotkeys
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // TAB to toggle UI
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        toggleControls(!ui.controlsOpen)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [ui.controlsOpen, toggleControls])
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -28,7 +79,95 @@ export function Controls() {
     }
   }
 
-  // ... (rest of code)
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    try {
+      e.target.value = null
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const img = new Image()
+        img.onload = () => setImage(img)
+        img.onerror = () => alert("Error loading image.")
+        img.src = event.target.result
+      }
+      reader.readAsDataURL(file)
+    } catch (err) {
+      console.error(err)
+      alert("Unexpected error during upload.")
+    }
+  }
+
+  const loadDemoImage = () => {
+    const img = new Image()
+    img.crossOrigin = "Anonymous"
+    img.onload = () => setImage(img)
+    img.onerror = () => alert("Failed to load demo image.")
+    img.src = "https://picsum.photos/1920/1080"
+  }
+
+  const handleSaveProject = () => {
+    const data = {
+      version: 1,
+      timestamp: Date.now(),
+      state: {
+        transforms, symmetry, warp, displacement, masking,
+        tiling, color, effects, snapshots, generator: store.generator
+      }
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `lumen-project-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleLoadProject = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    e.target.value = null
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result)
+        if (data.state) {
+          useStore.setState(data.state)
+        }
+      } catch (err) {
+        console.error(err)
+        alert("Failed to load project file.")
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const handleExportPrint = () => {
+    const { width, height } = store.canvas
+    // Trigger WebGL Export via State
+    store.triggerExport({
+      width: 3840, // 4K default for "High Res"
+      height: 3840 * (height / width),
+      filename: `LumenLab_HighRes_${Date.now()}.png`
+    })
+  }
+
+  // Minimized View
+  if (!ui.controlsOpen) {
+    return (
+      <div className="absolute top-4 left-4 z-50">
+        <button
+          onClick={() => toggleControls(true)}
+          className="bg-black/50 hover:bg-black/80 text-white p-2 rounded-lg border border-white/10 backdrop-blur-md transition-all shadow-xl group"
+          title="Show Controls (TAB)"
+        >
+          <ChevronRight size={20} className="group-hover:scale-110 transition-transform" />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="absolute top-0 left-0 h-full w-80 bg-neutral-900/95 backdrop-blur-md border-r border-neutral-800 flex flex-col z-50 transition-transform duration-300 ease-in-out shadow-2xl">
