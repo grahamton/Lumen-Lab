@@ -4,7 +4,7 @@ import { presets } from '../presets'
 import {
   Zap, Sliders, Layers, Move, Hexagon, Waves, Activity, FolderOpen,
   RefreshCw, Dices, ChevronDown, ChevronRight, Download, Save, Trash2, HelpCircle,
-  Camera, Play, Pause, PanelLeftClose, Maximize, Minimize
+  Camera, Play, Pause, PanelLeftClose, Maximize, Minimize, Mic
 } from 'lucide-react'
 
 function ControlGroup({ label, value, min, max, step = 1, onChange, children, isCore = false }) {
@@ -47,6 +47,7 @@ export function Controls() {
     effects, setEffects,
     snapshots, addSnapshot, deleteSnapshot, loadSnapshot,
     animation, setAnimation,
+    audio, setAudio,
     toggleHelp,
     resetState
   } = useStore()
@@ -442,6 +443,46 @@ export function Controls() {
               </>
             )}
           </div>
+        </Section>
+
+        {/* 4. Audio Reactivity */}
+        <Section
+          title="Audio Reactivity"
+          icon={<Mic size={14} />}
+          tooltip="Make the visuals dance to sound. Creates an audio feedback loop for some parameters."
+        >
+          <div className="mb-3">
+            <button
+              onClick={() => {
+                if (!audio.enabled) {
+                  // Request permission implicitly by enabling
+                  setAudio('enabled', true)
+                } else {
+                  setAudio('enabled', false)
+                }
+              }}
+              className={`w-full py-2 px-3 rounded text-xs flex items-center justify-center gap-2 border transition-all ${audio.enabled
+                ? 'bg-red-900/50 text-red-100 border-red-500 animate-pulse-slow shadow-[0_0_15px_rgba(220,38,38,0.3)]'
+                : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700'
+                }`}
+            >
+              <Mic size={14} className={audio.enabled ? "animate-bounce" : ""} />
+              {audio.enabled ? "Listening (Mic Active)" : "Enable Microphone Input"}
+            </button>
+          </div>
+
+          {audio.enabled && (
+            <div className="space-y-3 bg-neutral-800/30 p-2 rounded-lg border border-neutral-800/50">
+              <ControlGroup label="Master Gain" value={audio.sensitivity} min={0} max={3.0} step={0.1} onChange={(v) => setAudio('sensitivity', v)} />
+
+              <div className="border-t border-neutral-700/50 pt-2 mt-2">
+                <span className="text-[10px] uppercase font-bold text-neutral-500 mb-2 block">Band Reactivity</span>
+                <ControlGroup label="Bass (Scale)" value={audio.reactivity.bass} min={0} max={3.0} step={0.1} onChange={(v) => setAudio('reactivity', { ...audio.reactivity, bass: v })} />
+                <ControlGroup label="Mids (Displace)" value={audio.reactivity.mid} min={0} max={3.0} step={0.1} onChange={(v) => setAudio('reactivity', { ...audio.reactivity, mid: v })} />
+                <ControlGroup label="Highs (FX)" value={audio.reactivity.high} min={0} max={3.0} step={0.1} onChange={(v) => setAudio('reactivity', { ...audio.reactivity, high: v })} />
+              </div>
+            </div>
+          )}
         </Section>
 
         {/* 4. Color & Brightness */}

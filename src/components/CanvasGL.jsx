@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore } from '../store/useStore'
 import { useVideoRecorder } from '../hooks/useVideoRecorder'
+import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
 import vertShader from '../shaders/visualizer.vert?raw'
 import fragShader from '../shaders/visualizer.frag?raw'
 
@@ -16,6 +17,9 @@ function VisualizerScene() {
   const triggerExport = useStore((state) => state.triggerExport)
   const fluxEnabled = useStore((state) => state.flux.enabled)
   const shape = useStore((state) => state.canvas.shape)
+  // Audio State
+  const audio = useStore((state) => state.audio)
+
   // Recording State from Store (Triggers)
   const recordingState = useStore((state) => state.recording)
   const setRecording = useStore((state) => state.setRecording)
@@ -24,14 +28,11 @@ function VisualizerScene() {
   const timeRef = useRef(0)
   const imageAspect = useRef(1)
 
-  // Video Recorder Hook
+  // Hooks
   const { isRecording, duration, startRecording, stopRecording } = useVideoRecorder(gl)
+  const { isReady: audioReady, getFrequencyData } = useAudioAnalyzer(audio.enabled, audio.source)
 
-  // Sync Store -> Recorder (Start/Stop trigger)
-  // We use a "request" pattern or simply check mapped state?
-  // Let's assume UI toggles store.recording.isActive, but that might create a loop.
-  // Better: UI calls store.toggleRecording(), which sets a specific flag or we handle it here.
-  // Actually, simpler: Let the UI set `isActive` to true/false, and we react here.
+  // ... (Video Recording UseEffects handled as before)
   useEffect(() => {
     if (recordingState.isActive && !isRecording) {
       startRecording()
@@ -40,11 +41,8 @@ function VisualizerScene() {
     }
   }, [recordingState.isActive, isRecording, startRecording, stopRecording])
 
-  // Sync Timer -> Store (for UI display)
   useEffect(() => {
-    if (isRecording) {
-      setRecording('progress', duration)
-    }
+    if (isRecording) setRecording('progress', duration)
   }, [duration, isRecording, setRecording])
 
 
@@ -54,48 +52,44 @@ function VisualizerScene() {
     return t
   })
 
-  // ... (rest of uniforms initialization)
   const [uniforms] = useState(() => ({
     uTexture: { value: texture },
     uResolution: { value: new THREE.Vector2(size.width, size.height) },
     uAspect: { value: size.width / size.height },
-    uImageAspect: { value: 1.0 }, // New: Image Aspect
-    uShape: { value: 0 }, // New: 0=Rect, 1=Circle
+    uImageAspect: { value: 1.0 },
+    uShape: { value: 0 },
     uTime: { value: 0 },
-    uTransforms: { value: new THREE.Vector4(0, 0, 1, 0) }, // x, y, scale, rotation
+    uTransforms: { value: new THREE.Vector4(0, 0, 1, 0) },
     uSymEnabled: { value: false },
     uSymSlices: { value: 6 },
-    uWarpType: { value: 0 }, // 0=none, 1=polar, 2=log
+    uWarpType: { value: 0 },
     uDisplacement: { value: new THREE.Vector2(0, 10) },
-    uTilingType: { value: 0 }, // 0=none
+    uTilingType: { value: 0 },
     uTilingScale: { value: 1 },
     uPosterize: { value: 256 },
-    uEffects: { value: new THREE.Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
+    uEffects: { value: new THREE.Vector4(0, 0, 0, 0) },
     uGenType: { value: 0 },
-    uGenParams: { value: new THREE.Vector3(50, 50, 50) }
+    uGenParams: { value: new THREE.Vector3(50, 50, 50) },
+    // Audio Uniforms
+    uAudioLow: { value: 0 },
+    uAudioMid: { value: 0 },
+    uAudioHigh: { value: 0 }
   }))
 
-  // ... (rest of useEffects)
-  // Sync Texture when image changes
+  // ... (Texture & Resize UseEffects same as before)
   useEffect(() => {
     if (!image || !image.complete) return
-
-    const uniformValues = uniforms
-
     texture.image = image
     texture.needsUpdate = true
-    // Update Aspect Ratio
     if (image.naturalHeight > 0) {
       imageAspect.current = image.naturalWidth / image.naturalHeight
-      uniformValues.uImageAspect.value = imageAspect.current
+      uniforms.uImageAspect.value = imageAspect.current
     }
   }, [image, texture, uniforms])
 
-  // Resize Handler
   useEffect(() => {
-    const uniformValues = uniforms
-    uniformValues.uResolution.value.set(size.width, size.height)
-    uniformValues.uAspect.value = size.width / size.height
+    uniforms.uResolution.value.set(size.width, size.height)
+    uniforms.uAspect.value = size.width / size.height
   }, [size, uniforms])
 
   // Render Loop (60FPS)
@@ -103,44 +97,69 @@ function VisualizerScene() {
     const uniformValues = uniforms
     const {
       transforms, symmetry, warp, displacement, tiling,
-      color, effects, generator
-    } = useStore.getState() // Access fresh state without re-render
+      color, effects, generator, audio: audioState
+    } = useStore.getState()
 
-    // Flux Time Logic
+    // Time
     if (fluxEnabled) {
       timeRef.current += delta
     }
     uniformValues.uTime.value = timeRef.current
 
-    // Update Shape Uniform
-    uniformValues.uShape.value = shape === 'circle' ? 1 : 0
+    // Audio Analysis
+    let bass = 0, mid = 0, high = 0
+    if (audioState.enabled && audioReady) {
+      const freq = getFrequencyData()
+      // Normalize 0-255 to 0-1 range
+      // Apply sensitivity
+      const sens = audioState.sensitivity
+      bass = (freq.low / 255) * sens
+      mid = (freq.mid / 255) * sens
+      high = (freq.high / 255) * sens
+    }
 
-    // Sync Uniforms
+    uniformValues.uAudioLow.value = bass
+    uniformValues.uAudioMid.value = mid
+    uniformValues.uAudioHigh.value = high
+
+    // Reactive Modifications (in-shader or here? Let's do here for some, shader for texture fx)
+    // Actually, modulating uniforms here is very powerful.
+
+    // Example: Bass hits scale
+    const reactiveScale = transforms.scale + (bass * audioState.reactivity.bass * 0.2)
+
     uniformValues.uTransforms.value.set(
       transforms.x,
       transforms.y,
-      transforms.scale,
-      transforms.rotation
+      reactiveScale,
+      transforms.rotation + (mid * audioState.reactivity.mid * 0.01) // slight rotation on mids
     )
 
+    uniformValues.uShape.value = shape === 'circle' ? 1 : 0
     uniformValues.uSymEnabled.value = symmetry.enabled
     uniformValues.uSymSlices.value = symmetry.slices
 
     const warpMap = { 'none': 0, 'polar': 1, 'log-polar': 2 }
     uniformValues.uWarpType.value = warpMap[warp.type] || 0
 
-    uniformValues.uDisplacement.value.set(displacement.amp, displacement.freq)
+    // Displace amp can react to Mids
+    const reactiveAmp = displacement.amp + (mid * audioState.reactivity.mid * 50)
+    uniformValues.uDisplacement.value.set(reactiveAmp, displacement.freq)
 
     const tileMap = { 'none': 0, 'p1': 1, 'p2': 2, 'p4m': 3 }
     uniformValues.uTilingType.value = tileMap[tiling.type] || 0
+    // Tiling scale reactive to Highs?
+    // const reactiveTileScale = tiling.scale + (high * audioState.reactivity.high * 0.5)
     uniformValues.uTilingScale.value = tiling.scale
 
     uniformValues.uPosterize.value = color.posterize
 
+    // Effects react to highs?
+    const reactiveMids = effects.solarize + (high * audioState.reactivity.high * 50)
     uniformValues.uEffects.value.set(
       effects.edgeDetect,
       effects.invert,
-      effects.solarize,
+      reactiveMids,
       effects.shift
     )
 

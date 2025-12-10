@@ -88,6 +88,18 @@ export const useStore = create((set) => ({
     enabled: false,
   },
 
+  // Audio Reactivity State
+  audio: {
+    enabled: false,
+    source: 'mic', // 'mic', 'file'
+    sensitivity: 1.0, // Master Gain
+    reactivity: {
+      bass: 1.0, // Log-Polar / Scale
+      mid: 1.0,  // Displacement
+      high: 1.0, // Color / Edge
+    }
+  },
+
   // UI State
   ui: {
     helpOpen: true,
@@ -251,6 +263,12 @@ export const useStore = create((set) => ({
   setFlux: (key, value) => set((state) => ({
     flux: { ...state.flux, [key]: value }
   })),
+
+  setAudio: (key, value) => set((state) => {
+    // Handle nested reactivity updates if key is 'reactivity' (or we can flatten, but let's keep it simple)
+    // Actually, let's allow partial updates: setAudio('reactivity', { ...state.audio.reactivity, bass: val })
+    return { audio: { ...state.audio, [key]: value } }
+  }),
 
   // UI & Export
   triggerExport: (req) => set((state) => ({
