@@ -71,7 +71,9 @@ export function useAnimator() {
         noise: lerp(eff1.noise || 0, eff2.noise || 0, t),
       },
       generator: {
-        type: gen1.type || 'none',
+        // FIX: If an image is loaded, force generator to 'none' to prevent it from hiding the image.
+        // This solves the issue where playing a sequence (recorded with default Voronoi) hides the uploaded image.
+        type: useStore.getState().image ? 'none' : (gen1.type || 'none'),
         param1: lerp(gen1.param1 ?? 50, gen2.param1 ?? 50, t),
         param2: lerp(gen1.param2 ?? 50, gen2.param2 ?? 50, t),
         param3: lerp(gen1.param3 ?? 50, gen2.param3 ?? 50, t),
