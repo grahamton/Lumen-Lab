@@ -10,7 +10,7 @@
 
 **For Users (No Coding Required):**
 1.  **Download**: Go to the **[Releases Page](https://github.com/GRAHAMTON/Lumenlab/releases)** (or look in the sidebar).
-2.  **Get the EXE**: Download `Lumen Lab Setup 0.0.0.exe`.
+2.  **Get the EXE**: Download `Lumen.Lab.Setup.1.1.0.zip`.
 3.  **Install**: Double-click the file. It will install and launch automatically.
 4.  **Run**: You'll find "Lumen Lab" in your Start Menu.
 
