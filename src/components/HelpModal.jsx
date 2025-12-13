@@ -132,6 +132,17 @@ export function HelpModal() {
                 </div>
               </div>
             </div>
+            {/* Gamepad Info */}
+            <div className="mt-4 bg-neutral-800/30 p-4 rounded-xl border border-neutral-800 flex gap-4 items-center">
+              <Gamepad2 size={24} className="text-indigo-400" />
+              <div>
+                <strong className="text-indigo-400 block text-sm mb-1 uppercase tracking-wider">Gamepad Supported</strong>
+                <p className="text-xs text-neutral-400">
+                  <strong>Left Stick:</strong> Pan • <strong>Right Stick:</strong> Zoom/Rotate • <strong>Triggers:</strong> Distortion<br />
+                  <strong>A:</strong> Play/Pause • <strong>B:</strong> Symmetry • <strong>X:</strong> Invert • <strong>Y:</strong> Randomize
+                </p>
+              </div>
+            </div>
           </section>
 
           {/* Section 5: Time & Motion */}
