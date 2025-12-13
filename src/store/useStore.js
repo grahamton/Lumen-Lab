@@ -35,7 +35,7 @@ const DEFAULTS = {
     overlap: 0.0,
   },
   generator: {
-    type: 'none',
+    type: 'voronoi',
     param1: 50,
     param2: 50,
     param3: 50,

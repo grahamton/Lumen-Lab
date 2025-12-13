@@ -31,6 +31,13 @@ function App() {
       return
     }
 
+    // UX: If loaded state is blank (No Image + No Generator), force a generator
+    // This fixes "Blank image on load" for users with empty persisted state
+    if (!state.image && state.generator.type === 'none') {
+      console.log("Blank State Detected: auto-enabling Voronoi")
+      state.setGenerator('type', 'voronoi')
+    }
+
     midiManager.init()
 
     const handleKeyDown = (e) => {
