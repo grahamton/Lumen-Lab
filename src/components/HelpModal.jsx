@@ -1,5 +1,5 @@
 import { useStore } from '../store/useStore'
-import { X, MousePointer, Layers, Activity, Zap, Play, Image as ImageIcon, Box, Monitor } from 'lucide-react'
+import { X, MousePointer, Layers, Activity, Zap, Play, Image as ImageIcon, Box, Monitor, Gamepad as GamepadIcon } from 'lucide-react'
 
 export function HelpModal() {
   const { ui, toggleHelp } = useStore()
@@ -136,7 +136,7 @@ export function HelpModal() {
             <div className="mt-4 grid grid-cols-2 gap-4">
               <div className="bg-neutral-800/30 p-4 rounded-xl border border-neutral-800 flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm uppercase tracking-wider">
-                  <Gamepad2 size={16} /> Gamepad
+                  <GamepadIcon size={16} /> Gamepad
                 </div>
                 <p className="text-xs text-neutral-400">
                   <strong>L-Stick:</strong> Pan • <strong>R-Stick:</strong> Zoom<br />
@@ -158,7 +158,7 @@ export function HelpModal() {
           {/* Section 5: Time & Motion */}
           <section>
             <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-              <Play size={18} className="text-green-400" /> 5. Flux & Visualizer
+              {/* <Play size={18} className="text-green-400" /> */} 5. Flux & Visualizer
             </h3>
             <div className="bg-neutral-800/30 p-4 rounded-xl border border-neutral-800">
               <p className="text-sm text-neutral-300 mb-2">
@@ -189,9 +189,9 @@ function Card({ title, icon, children }) {
   return (
     <div className="bg-neutral-800/40 p-4 rounded-xl border border-neutral-800 hover:border-neutral-700 transition-colors">
       <h4 className="font-bold text-white mb-2 flex items-center gap-2 text-sm">{icon} {title}</h4>
-      <p className="text-xs text-neutral-400 leading-relaxed">
+      <div className="text-xs text-neutral-400 leading-relaxed">
         {children}
-      </p>
+      </div>
     </div>
   )
 }
