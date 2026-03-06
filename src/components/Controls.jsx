@@ -54,12 +54,12 @@ const Toggle = ({ label, value, onChange }) => (
   </div>
 )
 
-const TabButton = ({ icon: Icon, active, onClick }) => (
+const TabButton = ({ icon, active, onClick }) => (
   <button
     onClick={onClick}
     className={`p-3 rounded-lg transition-all ${active ? 'bg-cyan-900/30 text-cyan-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'}`}
   >
-    <Icon size={20} />
+    {React.createElement(icon, { size: 20 })}
   </button>
 )
 

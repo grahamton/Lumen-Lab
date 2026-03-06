@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/immutability */
 import { useEffect, useRef, useState } from 'react'
 
 export function useVideoRecorder(gl) {

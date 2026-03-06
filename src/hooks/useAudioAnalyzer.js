@@ -6,25 +6,43 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
   const sourceNodeRef = useRef(null)
   const dataArrayRef = useRef(null)
   const audioElementRef = useRef(null)
-  // We use a ref for the bands to avoid re-renders, components can poll this or we can return it.
-  const bandsRef = useRef({ low: 0, mid: 0, high: 0 })
   const [isReady, setIsReady] = useState(false)
+
+  const teardownAudio = () => {
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect()
+      sourceNodeRef.current = null
+    }
+
+    if (analyserRef.current) {
+      analyserRef.current.disconnect()
+      analyserRef.current = null
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+
+    if (audioElementRef.current) {
+      audioElementRef.current.pause()
+      audioElementRef.current = null
+    }
+
+    dataArrayRef.current = null
+  }
 
   useEffect(() => {
     if (!enabled) {
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
-        audioContextRef.current = null
-        setIsReady(false)
-      }
-      if (audioElementRef.current) {
-        audioElementRef.current.pause()
-        audioElementRef.current = null
-      }
+      teardownAudio()
       return
     }
 
+    let disposed = false
+
     const initAudio = async () => {
+      setIsReady(false)
+
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext
         const ctx = new AudioContext()
@@ -56,8 +74,12 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
           return
         }
 
+        if (disposed) {
+          ctx.close()
+          return
+        }
+
         sourceNode.connect(analyser)
-        sourceNodeRef.current = sourceNode
         // Note: Do NOT connect to destination (speakers) for Mic, or feedback loop!
 
         audioContextRef.current = ctx
@@ -75,13 +97,8 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
     initAudio()
 
     return () => {
-      if (sourceNodeRef.current) sourceNodeRef.current.disconnect()
-      if (analyserRef.current) analyserRef.current.disconnect()
-      if (audioContextRef.current) audioContextRef.current.close()
-      if (audioElementRef.current) {
-        audioElementRef.current.pause()
-        audioElementRef.current = null
-      }
+      disposed = true
+      teardownAudio()
     }
   }, [enabled, source, fileUrl])
 
@@ -113,5 +130,5 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
     return { low, mid, high }
   }
 
-  return { isReady, getFrequencyData }
+  return { isReady: enabled && isReady, getFrequencyData }
 }

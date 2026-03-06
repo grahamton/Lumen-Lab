@@ -485,7 +485,7 @@ export const useStore = create(
           effects: { ...DEFAULTS.effects },
           flux: { ...DEFAULTS.flux },
           lfo: { ...DEFAULTS.lfo },
-          audio: { ...DEFAULTS.audio },
+          audio: { ...state.audio },
           animation: { ...state.animation, isPlaying: false } // Stop playing but keep timeline
         }))
       },

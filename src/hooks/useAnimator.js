@@ -88,8 +88,6 @@ export function useAnimator() {
   // const currentIndexRef = useRef(0) // Removed: Use store's activeStep for UI consistency if needed, checking below
   const directionRef = useRef(1) // 1 for forward, -1 for backward
 
-  const interpolateStateMemo = useCallback(interpolateState, [])
-
   // Easing Functions
   const easings = useMemo(() => ({
     linear: t => t,
@@ -168,7 +166,7 @@ export function useAnimator() {
     if (!s1 || !s2) return
 
     // Interpolate & Load
-    const currentState = interpolateStateMemo(s1, s2, progress)
+    const currentState = interpolateState(s1, s2, progress)
     if (currentState) loadSnapshot(currentState)
 
     // Cycle Complete?
@@ -191,7 +189,7 @@ export function useAnimator() {
     }
 
     requestRef.current = requestAnimationFrame(animateFrame)
-  }, [animation, snapshots, easings, interpolateStateMemo, loadSnapshot, setAnimation])
+  }, [animation, snapshots, easings, loadSnapshot, setAnimation])
 
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animate)

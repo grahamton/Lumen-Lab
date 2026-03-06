@@ -126,10 +126,11 @@ function handleButtonPress(index, store) {
     case 1: // B - Toggle Symmetry
       store.setSymmetry('enabled', !store.symmetry.enabled)
       break
-    case 2: // X - Toggle Invert
+    case 2: { // X - Toggle Invert
       const isInverted = store.effects.invert > 0
       store.setEffect('invert', isInverted ? 0 : 100)
       break
+    }
     case 3: // Y - Randomize
       store.randomize()
       break

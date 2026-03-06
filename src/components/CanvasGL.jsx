@@ -19,7 +19,6 @@ function VisualizerScene() {
   const triggerExport = useStore((state) => state.triggerExport)
   const fluxEnabled = useStore((state) => state.flux?.enabled)
   const shape = useStore((state) => state.canvas.shape)
-  const globalPause = useStore((state) => state.ui.globalPause) // FREEZE
   // Audio State
   const audio = useStore((state) => state.audio || {})
 
@@ -139,7 +138,7 @@ function VisualizerScene() {
     const uniformValues = uniforms
     const {
       transforms, symmetry, warp, displacement, tiling,
-      masking, color, effects, generator, audio: audioState, lfo, animation, ui
+      masking, color, effects, generator, audio: audioState, lfo, ui
     } = useStore.getState() // Access fresh state without re-render
 
     // Time Logic: Always translate global time
@@ -160,10 +159,6 @@ function VisualizerScene() {
       // Normalize 0-255 to 0-1 range
       // Apply sensitivity
       const sens = audioState.sensitivity
-      // Safe access to reactivity defaults in case of partial state
-      const rBass = audioState.reactivity?.bass ?? 1.0
-      const rMid = audioState.reactivity?.mid ?? 1.0
-      const rHigh = audioState.reactivity?.high ?? 1.0
 
       bass = (freq.low / 255) * sens
       mid = (freq.mid / 255) * sens
