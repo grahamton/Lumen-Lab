@@ -376,7 +376,7 @@ export const useStore = create(
       })),
 
       importUserPreset: (preset) => set((state) => ({
-        userPresets: [...(state.userPresets || []), { ...preset, id: Date.now() }]
+        userPresets: [...(state.userPresets || []), { ...preset, id: Date.now() + Math.random() }]
       })),
 
       setAnimation: (key, value) => set((state) => ({

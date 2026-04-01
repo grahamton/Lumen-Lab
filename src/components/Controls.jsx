@@ -156,11 +156,22 @@ export function Controls() {
     reader.onload = (evt) => {
       try {
         const parsed = JSON.parse(evt.target.result)
-        if (!parsed.state || typeof parsed.state !== 'object') {
+        const state = parsed.state
+        if (!state || typeof state !== 'object' || Array.isArray(state)) {
           setPresetError('Invalid preset file')
           return
         }
-        store.importUserPreset({ name: parsed.name || file.name, state: parsed.state })
+        // Require at least one known top-level key in state
+        const knownKeys = ['transforms', 'symmetry', 'warp', 'displacement', 'tiling', 'masking', 'color', 'effects', 'generator']
+        const hasKnownKey = knownKeys.some((k) => k in state)
+        if (!hasKnownKey) {
+          setPresetError('Invalid preset file')
+          return
+        }
+        // Sanitize the preset name: strip path separators and control characters
+        const rawName = parsed.name || file.name.replace(/\.[^.]+$/, '')
+        const safeName = String(rawName).replace(/[/\\<>:"|?*\x00-\x1f]/g, '').trim() || 'Imported Preset'
+        store.importUserPreset({ name: safeName, state })
         setPresetError('')
       } catch {
         setPresetError('Could not read file')
