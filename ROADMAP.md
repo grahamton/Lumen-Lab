@@ -18,8 +18,8 @@ This roadmap outlines major milestones and associated issues for future developm
 
 ## Milestone 3 – Community Preset Library
 
-- [ ] **Preset format specification**: Define a versioned file format to save complete sessions, including generator settings, effects stack and MIDI mappings.
-- [ ] **Import/export**: Implement import/export functionality and integrate with the preset manager so users can share configurations.
+- [x] **Preset format specification**: Define a versioned file format to save complete sessions, including generator settings, effects stack and MIDI mappings.
+- [x] **Import/export**: Implement import/export functionality and integrate with the preset manager so users can share configurations.
 - [ ] **Library repository**: Host a cloud‑accessible repository (e.g., GitHub Pages or a simple API) where users can browse and download presets.
 - [ ] **In‑app browser**: Build an interface within Lumen Lab to browse, search and download community presets.
 
