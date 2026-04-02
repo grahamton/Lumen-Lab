@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react'
 import { CONTROLS } from '../config/uiConfig'
 import { useStore } from '../store/useStore'
+import { presets as builtInPresets } from '../presets'
 import { CubeIcon, GridIcon, EyeIcon, SlidersIcon } from './Icons'
-import { Sliders, Activity, Monitor, Download, Maximize, RefreshCw, Layers, Zap, Undo2, RotateCcw, Power, Gamepad2, Pause, StopCircle, Play, Music, Sparkles, Settings, PauseCircle, PlayCircle } from 'lucide-react'
+import { Sliders, Activity, Monitor, Download, Maximize, RefreshCw, Layers, Zap, Undo2, RotateCcw, Power, Gamepad2, Pause, StopCircle, Play, Music, Sparkles, Settings, PauseCircle, PlayCircle, BookOpen, Upload } from 'lucide-react'
 
 // Minimal Control Components
 const ControlGroup = ({ label, value, min, max, onChange, step = 1, path }) => {
@@ -74,10 +75,13 @@ export function Controls() {
   // Local UI State
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [presetError, setPresetError] = useState('')
 
   // Handlers for File Input
   const fileInputRef = useRef(null)
   const audioFileRef = useRef(null)
+  const presetImportRef = useRef(null)
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
@@ -122,6 +126,59 @@ export function Controls() {
     }
 
     e.target.value = '' // Reset input to allow re-uploading the same file
+  }
+
+  const handleSavePreset = () => {
+    const name = presetName.trim()
+    if (!name) {
+      setPresetError('Enter a name first')
+      return
+    }
+    store.saveUserPreset(name)
+    setPresetName('')
+    setPresetError('')
+  }
+
+  const exportPreset = (preset) => {
+    const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${preset.name.replace(/\s+/g, '_')}.lumenpreset.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handlePresetImport = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const parsed = JSON.parse(evt.target.result)
+        const state = parsed.state
+        if (!state || typeof state !== 'object' || Array.isArray(state)) {
+          setPresetError('Invalid preset file')
+          return
+        }
+        // Require at least one known top-level key in state
+        const knownKeys = ['transforms', 'symmetry', 'warp', 'displacement', 'tiling', 'masking', 'color', 'effects', 'generator']
+        const hasKnownKey = knownKeys.some((k) => k in state)
+        if (!hasKnownKey) {
+          setPresetError('Invalid preset file')
+          return
+        }
+        // Sanitize the preset name: strip path separators and control characters
+        const rawName = parsed.name || file.name.replace(/\.[^.]+$/, '')
+        const safeName = String(rawName).replace(/[/\\<>:"|?*\x00-\x1f]/g, '').trim() || 'Imported Preset'
+        store.importUserPreset({ name: safeName, state })
+        setPresetError('')
+      } catch {
+        setPresetError('Could not read file')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   // Content for each Tab
@@ -270,6 +327,100 @@ export function Controls() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Preset Manager */}
+      <div className="bg-neutral-900/50 p-3 rounded border border-neutral-800/50">
+        <div className="flex items-center gap-2 text-xs text-violet-400 font-bold uppercase tracking-wider mb-4">
+          <BookOpen size={12} /> Presets
+        </div>
+
+        {/* Built-in Presets */}
+        <div className="mb-4">
+          <label className="text-[10px] text-neutral-500 font-bold uppercase mb-2 block">Built-in</label>
+          <div className="grid grid-cols-2 gap-1">
+            {builtInPresets.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => store.loadSnapshot(p.state)}
+                className="py-1.5 text-[10px] uppercase rounded border border-neutral-800 bg-neutral-900 text-neutral-400 hover:border-violet-700 hover:text-violet-200 transition-colors truncate px-1"
+                title={p.name}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Save / Import */}
+        <div className="mb-3 pt-3 border-t border-neutral-800">
+          <label className="text-[10px] text-neutral-500 font-bold uppercase mb-2 block">My Presets</label>
+          <div className="flex gap-1 mb-1">
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => { setPresetName(e.target.value); setPresetError('') }}
+              onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+              placeholder="Preset name…"
+              className="flex-1 bg-neutral-800 text-[10px] text-neutral-300 px-2 py-1.5 rounded border border-neutral-700 outline-none focus:border-violet-500 placeholder-neutral-600"
+            />
+            <button
+              onClick={handleSavePreset}
+              className="px-2 py-1.5 bg-violet-900/40 hover:bg-violet-900/70 text-violet-300 border border-violet-800/50 rounded text-[10px] font-bold uppercase transition-colors"
+              title="Save current settings as a preset"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => presetImportRef.current?.click()}
+              className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 border border-neutral-700 rounded text-[10px] font-bold uppercase transition-colors"
+              title="Import preset from JSON file"
+            >
+              <Upload size={12} />
+            </button>
+          </div>
+          {presetError && <p className="text-[9px] text-red-400 mb-1">{presetError}</p>}
+          <input
+            ref={presetImportRef}
+            type="file"
+            accept=".json"
+            onChange={handlePresetImport}
+            className="hidden"
+          />
+        </div>
+
+        {/* User Preset List */}
+        {(store.userPresets || []).length === 0 ? (
+          <p className="text-[9px] text-neutral-700 italic text-center py-2">No saved presets yet</p>
+        ) : (
+          <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+            {(store.userPresets || []).map((p) => (
+              <div key={p.id} className="flex items-center gap-1 bg-neutral-800/50 rounded px-2 py-1">
+                <button
+                  onClick={() => store.loadSnapshot(p.state)}
+                  className="flex-1 text-left text-[10px] text-neutral-300 hover:text-violet-300 transition-colors truncate"
+                  title={`Load: ${p.name}`}
+                >
+                  {p.name}
+                </button>
+                <button
+                  onClick={() => exportPreset(p)}
+                  className="text-neutral-500 hover:text-cyan-400 transition-colors p-0.5"
+                  title="Export as JSON"
+                >
+                  <Download size={11} />
+                </button>
+                <button
+                  onClick={() => store.deleteUserPreset(p.id)}
+                  className="text-neutral-600 hover:text-red-400 transition-colors p-0.5 font-bold text-[10px]"
+                  title="Delete preset"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>
