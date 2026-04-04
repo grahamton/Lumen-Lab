@@ -32,6 +32,11 @@ export function SectionGeometry({ onInteract }) {
 
   return (
     <div>
+      <Toggle
+        label="KALEIDOSCOPE"
+        isOn={symmetry.enabled}
+        onToggle={wrap(() => setSymmetry('enabled', !symmetry.enabled))}
+      />
       <ControlGroup section="symmetry" param="slices" value={symmetry.slices} onChange={wrap((v) => setSymmetry('slices', v))} />
       <ControlGroup section="transforms" param="rotation" value={transforms.rotation} onChange={wrap((v) => setTransform('rotation', v))} />
       <ControlGroup section="displacement" param="amp" value={displacement.amp} onChange={wrap((v) => setDisplacement('amp', v))} />

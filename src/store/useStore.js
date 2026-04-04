@@ -14,7 +14,7 @@ const DEFAULTS = {
     rotation: 0,
   },
   symmetry: {
-    enabled: false,
+    enabled: true,
     type: 'radial',
     slices: 6,
     offset: 0,
