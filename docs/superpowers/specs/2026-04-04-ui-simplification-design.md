@@ -87,6 +87,7 @@ The top strip contains a 2×3 grid: **5 named generator buttons** (Voronoi, Plas
 - Noise grain
 - Audio Reactive toggle (on/off)
 - Audio sensitivity (visible only when audio reactive is on)
+- **Circle Crop toggle** (on/off — applies circular alpha mask to canvas output)
 
 ### MOTION
 - Animate toggle (global play/pause)
