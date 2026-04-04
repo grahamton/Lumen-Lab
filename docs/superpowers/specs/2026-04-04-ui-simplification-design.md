@@ -25,8 +25,9 @@ A single scrollable sidebar replaces the 4-tab system. A persistent top strip an
 ┌─────────────────────────┐
 │  LUMEN LAB       ↺  ↻   │  ← topbar: title + undo/redo
 ├─────────────────────────┤
-│  GENERATOR              │  ← 2×3 grid of generator buttons
+│  GENERATOR              │  ← 2×3 grid: 5 generators + IMAGE slot
 │  [VORONOI] [PLASMA] ... │
+│  [WAVE]    [NOISE] [IMG]│
 │  ○ SCALE  ○ SPEED  ○ HUE│  ← 3 always-visible knobs
 ├─────────────────────────┤
 │  ● GEOMETRY         ▼   │  ← last-touched, auto-expanded
@@ -48,12 +49,19 @@ A single scrollable sidebar replaces the 4-tab system. A persistent top strip an
 
 | Control | What it maps to | Store field |
 |---------|-----------------|-------------|
-| GENERATOR | 6-button picker | `generator.type` |
+| GENERATOR | 5 generator buttons + 1 IMAGE/UPLOAD slot | `generator.type` / `image` |
 | SCALE | Zoom/scale | `transforms.scale` |
 | SPEED | Time multiplier | `transforms.speed` |
 | HUE | Base hue shift | `color.hue` |
 
-The 3 knobs are implemented as `input[range]` sliders styled visually as rotary knobs (conic-gradient). Fully interactive and MIDI-learnable.
+### Generator Grid
+
+The top strip contains a 2×3 grid: **5 named generator buttons** (Voronoi, Plasma, Mandelbrot, Wave, Noise) **+ 1 IMAGE slot**. 
+
+- Clicking a generator button activates it and sets `generator.type`
+- Clicking IMAGE opens the system file picker (`accept="image/*,video/*"`), calls `store.resetForUpload()`, and loads the file as a `THREE.Texture` / `THREE.VideoTexture`
+- When an image/video is active, the IMAGE slot shows the filename (truncated) and is highlighted cyan, exactly like an active generator
+- Switching back to any generator deactivates the image and resumes procedural output
 
 ---
 
