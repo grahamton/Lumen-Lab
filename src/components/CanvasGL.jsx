@@ -5,10 +5,16 @@ import * as THREE from 'three'
 import { EffectComposer, Bloom, Noise, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import { useStore } from '../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { useVideoRecorder } from '../hooks/useVideoRecorder'
 import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
 import vertShader from '../shaders/visualizer.vert?raw'
 import fragShader from '../shaders/visualizer.frag?raw'
+
+const SYM_TYPE_MAP = { radial: 0, mirrorX: 1, mirrorY: 2 }
+const WARP_MAP     = { none: 0, polar: 1, 'log-polar': 2 }
+const TILE_MAP     = { none: 0, p1: 1, p2: 2, p4m: 3 }
+const GEN_MAP      = { none: 0, fibonacci: 1, voronoi: 2, grid: 3, liquid: 4, plasma: 5, fractal: 6 }
 
 // The Inner Scene
 function VisualizerScene() {
@@ -17,8 +23,6 @@ function VisualizerScene() {
   const image = useStore((state) => state.image)
   const exportRequest = useStore((state) => state.ui.exportRequest)
   const triggerExport = useStore((state) => state.triggerExport)
-  const fluxEnabled = useStore((state) => state.flux?.enabled)
-  const shape = useStore((state) => state.canvas.shape)
   // Audio State
   const audio = useStore((state) => state.audio || {})
 
@@ -29,6 +33,8 @@ function VisualizerScene() {
   const { gl, size } = useThree()
   const timeRef = useRef(0)
   const genTimeRef = useRef(0)
+  const fluxDriftRef = useRef({ rotation: 0, scale: 0 })
+  const audioMetersRef = useRef({ bass: 0, mid: 0, high: 0 })
   const imageAspect = useRef(1)
 
   // Hooks
@@ -133,7 +139,7 @@ function VisualizerScene() {
     const uniformValues = uniforms
     const {
       transforms, symmetry, warp, displacement, tiling,
-      color, effects, generator, audio: audioState, ui, flux
+      color, effects, generator, audio: audioState, ui, flux, canvas
     } = useStore.getState() // Access fresh state without re-render
 
     // Time Logic: Always translate global time
@@ -166,7 +172,9 @@ function VisualizerScene() {
     uniformValues.uAudioHigh.value = high
 
     // --- FLUX DRIFT LOGIC ---
-    let fluxDrift = { rotation: 0, scale: 0 }
+    const fluxDrift = fluxDriftRef.current
+    fluxDrift.rotation = 0
+    fluxDrift.scale = 0
     if (flux?.enabled) {
       const fluxAmount = flux.amount ?? 0.3
       // Use time-based Perlin-like noise for smooth drifting
@@ -191,20 +199,17 @@ function VisualizerScene() {
       transforms.rotation + (mid * rMid * 0.01) + fluxDrift.rotation
     )
 
-    uniformValues.uShape.value = shape === 'circle' ? 1 : 0
+    uniformValues.uShape.value = canvas.shape === 'circle' ? 1 : 0
     uniformValues.uSymEnabled.value = symmetry.enabled
     uniformValues.uSymSlices.value = symmetry.slices
-    const symTypeMap = { 'radial': 0, 'mirrorX': 1, 'mirrorY': 2 }
-    uniformValues.uSymType.value = symTypeMap[symmetry.type] || 0
+    uniformValues.uSymType.value = SYM_TYPE_MAP[symmetry.type] || 0
     uniformValues.uSymOffset.value = symmetry.offset || 0
 
-    const warpMap = { 'none': 0, 'polar': 1, 'log-polar': 2 }
-    uniformValues.uWarpType.value = warpMap[warp.type] || 0
+    uniformValues.uWarpType.value = WARP_MAP[warp.type] || 0
 
     uniformValues.uDisplacement.value.set(displacement.amp, displacement.freq)
 
-    const tileMap = { 'none': 0, 'p1': 1, 'p2': 2, 'p4m': 3 }
-    uniformValues.uTilingType.value = tileMap[tiling.type] || 0
+    uniformValues.uTilingType.value = TILE_MAP[tiling.type] || 0
     uniformValues.uTilingScale.value = tiling.scale
     uniformValues.uTilingOverlap.value = tiling.overlap || 0
 
@@ -222,21 +227,13 @@ function VisualizerScene() {
       effects.shift
     )
 
-    const genMap = { 'none': 0, 'fibonacci': 1, 'voronoi': 2, 'grid': 3, 'liquid': 4, 'plasma': 5, 'fractal': 6 }
-
-    uniformValues.uGenType.value = genMap[generator.type] || 0
+    uniformValues.uGenType.value = GEN_MAP[generator.type] || 0
     uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
 
-    // Audio meters to store (throttled)
-    const now = timeRef.current
-    if (audioState.enabled && audioReady && now - (timeRef.meterLast || 0) > 0.25) {
-      timeRef.meterLast = now
-      useStore.getState().setAudio('meters', {
-        bass: bass,
-        mid: mid,
-        high: high
-      })
-    }
+    // Audio meters — write to ref (avoids Zustand re-renders)
+    audioMetersRef.current.bass = bass
+    audioMetersRef.current.mid = mid
+    audioMetersRef.current.high = high
 
     // Debug Generators
     /* if (stateThree.clock.elapsedTime % 2 < 0.05) {
@@ -332,10 +329,15 @@ function VisualizerScene() {
 }
 
 function EffectsLayer() {
-  const perfCapFx = useStore((state) => state.ui?.perfCapFx)
-  const bloom = useStore((state) => state.effects.bloom)
-  const chromaticRaw = useStore((state) => state.effects.chromaticAberration)
-  const noiseRaw = useStore((state) => state.effects.noise)
+  const { perfCapFx, bloom, chromaticRaw, noiseRaw } = useStore(
+    (state) => ({
+      perfCapFx: state.ui?.perfCapFx,
+      bloom: state.effects.bloom,
+      chromaticRaw: state.effects.chromaticAberration,
+      noiseRaw: state.effects.noise,
+    }),
+    shallow
+  )
 
   const chromaticAberration = perfCapFx ? Math.min(chromaticRaw, 0.5) : chromaticRaw
   const noise = perfCapFx ? Math.min(noiseRaw, 0.5) : noiseRaw
