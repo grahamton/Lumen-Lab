@@ -34,7 +34,6 @@ function VisualizerScene() {
   const timeRef = useRef(0)
   const genTimeRef = useRef(0)
   const fluxDriftRef = useRef({ rotation: 0, scale: 0 })
-  const audioMetersRef = useRef({ bass: 0, mid: 0, high: 0 })
   const imageAspect = useRef(1)
 
   // Hooks
@@ -230,10 +229,7 @@ function VisualizerScene() {
     uniformValues.uGenType.value = GEN_MAP[generator.type] || 0
     uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
 
-    // Audio meters — write to ref (avoids Zustand re-renders)
-    audioMetersRef.current.bass = bass
-    audioMetersRef.current.mid = mid
-    audioMetersRef.current.high = high
+    // bass/mid/high are transient frame locals; no component subscribes to audio.meters
 
     // Debug Generators
     /* if (stateThree.clock.elapsedTime % 2 < 0.05) {
