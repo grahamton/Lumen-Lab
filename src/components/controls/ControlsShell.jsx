@@ -21,7 +21,7 @@ export function ControlsShell({ className = '' }) {
   const {
     undo, redo, undoStackLen, redoStackLen,
     controlsOpen, lastActiveSection, globalPause,
-    setUi, recording, setRecording, toggleControls
+    setUi, recordingIsActive, setRecording, toggleControls
   } = useStore(
     (state) => ({
       undo:              state.undo,
@@ -32,7 +32,7 @@ export function ControlsShell({ className = '' }) {
       lastActiveSection: state.ui.lastActiveSection,
       globalPause:       state.ui.globalPause,
       setUi:             state.setUi,
-      recording:         state.recording,
+      recordingIsActive: state.recording.isActive,
       setRecording:      state.setRecording,
       toggleControls:    state.toggleControls,
     }),
@@ -131,16 +131,16 @@ export function ControlsShell({ className = '' }) {
           FREEZE
         </button>
         <button
-          onClick={() => setRecording('isActive', !recording.isActive)}
-          aria-pressed={recording.isActive}
-          aria-label={recording.isActive ? 'Stop recording' : 'Start recording'}
+          onClick={() => setRecording('isActive', !recordingIsActive)}
+          aria-pressed={recordingIsActive}
+          aria-label={recordingIsActive ? 'Stop recording' : 'Start recording'}
           className={`flex-1 py-1.5 rounded text-[9px] tracking-widest font-semibold border transition-colors ${
-            recording.isActive
+            recordingIsActive
               ? 'bg-red-500 border-red-500 text-white'
               : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
           }`}
         >
-          {recording.isActive ? 'REC ●' : 'REC'}
+          {recordingIsActive ? 'REC ●' : 'REC'}
         </button>
       </div>
     </div>

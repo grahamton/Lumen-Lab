@@ -19,9 +19,9 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionMotion({ onInteract }) {
-  const { ui, setUi, animation, setAnimation, flux, setFlux } = useStore(
+  const { globalPause, setUi, animation, setAnimation, flux, setFlux } = useStore(
     (state) => ({
-      ui:           state.ui,
+      globalPause:  state.ui.globalPause,
       setUi:        state.setUi,
       animation:    state.animation,
       setAnimation: state.setAnimation,
@@ -30,7 +30,7 @@ export function SectionMotion({ onInteract }) {
     }),
     shallow
   )
-  const isPlaying = !ui.globalPause
+  const isPlaying = !globalPause
 
   function wrap(fn) {
     return (...args) => { onInteract?.(); fn(...args) }

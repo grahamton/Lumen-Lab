@@ -19,14 +19,14 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionEffects({ onInteract }) {
-  const { effects, setEffect, audio, setAudio, canvas, setCanvas } = useStore(
+  const { effects, setEffect, audio, setAudio, canvasShape, setCanvas } = useStore(
     (state) => ({
-      effects:   state.effects,
-      setEffect: state.setEffect,
-      audio:     state.audio,
-      setAudio:  state.setAudio,
-      canvas:    state.canvas,
-      setCanvas: state.setCanvas,
+      effects:     state.effects,
+      setEffect:   state.setEffect,
+      audio:       state.audio,
+      setAudio:    state.setAudio,
+      canvasShape: state.canvas.shape,
+      setCanvas:   state.setCanvas,
     }),
     shallow
   )
@@ -35,7 +35,7 @@ export function SectionEffects({ onInteract }) {
     return (...args) => { onInteract?.(); fn(...args) }
   }
 
-  const circleCrop = canvas.shape === 'circle'
+  const circleCrop = canvasShape === 'circle'
 
   return (
     <div>

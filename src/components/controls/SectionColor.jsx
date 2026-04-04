@@ -19,12 +19,12 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionColor({ onInteract }) {
-  const { color, setColor, effects, setEffect } = useStore(
+  const { color, setColor, effectsInvert, setEffect } = useStore(
     (state) => ({
-      color:     state.color,
-      setColor:  state.setColor,
-      effects:   state.effects,
-      setEffect: state.setEffect,
+      color:         state.color,
+      setColor:      state.setColor,
+      effectsInvert: state.effects.invert,
+      setEffect:     state.setEffect,
     }),
     shallow
   )
@@ -42,8 +42,8 @@ export function SectionColor({ onInteract }) {
 
       <Toggle
         label="INVERT"
-        isOn={effects.invert > 0}
-        onToggle={wrap(() => setEffect('invert', effects.invert > 0 ? 0 : 100))}
+        isOn={effectsInvert > 0}
+        onToggle={wrap(() => setEffect('invert', effectsInvert > 0 ? 0 : 100))}
       />
     </div>
   )
