@@ -1,73 +1,75 @@
 # Lumen Lab ⚡
 
-**Lumen Lab** is a real-time visual synthesizer. It transforms math and images into psychedelic tapestries, organic flows, and intricate mandalas—perfect for VJs, textile artists, and screen printers.
+A real-time visual synthesizer for Windows — built on Electron, React, and Three.js. Feed it math, images, or video and it generates psychedelic, audio-reactive visuals you can perform with live.
 
-[![Download PC](https://img.shields.io/badge/Windows-Download_Installer-blue?style=for-the-badge&logo=windows)](https://github.com/GRAHAMTON/Lumenlab/releases)
+Built for VJs, textile artists, and screen printers.
 
----
-
-## 📥 Download & Install
-
-**For Users (No Coding Required):**
-1.  **Download**: Go to the **[Releases Page](https://github.com/GRAHAMTON/Lumenlab/releases)** (or look in the sidebar).
-2.  **Get the EXE**: Download `Lumen.Lab.Setup.1.1.0.zip`.
-3.  **Install**: Double-click the file. It will install and launch automatically.
-4.  **Run**: You'll find "Lumen Lab" in your Start Menu.
-
-*(Note: Windows might show a "SmartScreen" warning because this is a new app. Click "More Info" -> "Run Anyway".)*
+> **Coming soon:** Web (PWA) and Mobile (iOS/Android) versions. See [ROADMAP.md](./ROADMAP.md).
 
 ---
 
-## ✨ Key Features
--   **Universal Input**: Drag & drop Images or Video (`.mp4`) files.
--   **Audio Reactivity**: Visuals pulse and shift to your microphone or music input.
--   **Generative Engines**: Built-in mathematical generators like Fibonacci, Voronoi, Liquid, and Plasma.
--   **Advanced Symmetry**: Radial, Mirror X, and Mirror Y modes with offset control.
--   **MIDI & Gamepad**: Map MIDI controllers or use an Xbox/PS controller for wireless jamming.
--   **Pro Effects Stack**: Bloom, Glitch, Noise, and Analog Color Grading (RGB/HSL).
--   **Preset Manager**: Save your own custom configurations or choose from 10+ built-in styles.
--   **Autosave**: Never lose your flow—the app remembers exactly where you left off.
--   **Capture**: Record sessions to `.webm` or take 4K Snapshots.
+## ✨ What It Does
 
-## 🖼️ Gallery
-*(Screenshots coming soon!)*
-> **Tip:** Press `S` to take a snapshot of your creation!
+- **5 Generators** — Fibonacci, Voronoi, Grid, Liquid, Plasma. Or drop in any image or video file.
+- **Geometry** — Kaleidoscope, Mirror X/Y, Warp (polar, log-polar), tiling modes
+- **Effects** — Bloom, chromatic aberration, noise, edge detection, color grading (HSL + posterize), circle crop
+- **Audio Reactivity** — Mic or audio file input, bass/mid/high bands drive the visuals
+- **MIDI + Gamepad** — MIDI learn on any parameter, Xbox/PlayStation controller support
+- **Drift Mode** — slow sinusoidal animation that mutates the canvas without touching controls
+- **Presets** — 10+ built-ins, save your own, animated snapshot transitions (loop/ping-pong/once)
+- **Undo/Redo** — Ctrl+Z / Ctrl+Shift+Z, 20-step history
+- **Capture** — Record to `.webm`, export 4K PNG snapshots
+- **Autosave** — state persists across sessions automatically
 
 ---
 
-## 🚀 Quick Start Guide
+## ⌨️ Key Shortcuts
 
-### 1. The Controls
--   **Source**: Drag & drop an image or Video, or select a Generator (Liquid, Plasma, etc.).
--   **Audio**: Click the Mic icon to enable Audio Reactivity. Watch the visuals dance!
--   **Geometry**: Turn on **Kaleidoscope** or **Mirror Symmetry** to make it infinite.
--   **Effects**: Use **Liquefy** to melt the screen or **Color Grading** to tint and tune the vibe.
-
-### 2. Projector Mode (Performance)
--   **Full Screen**: Press **F** or click the resize icon.
--   **Hide UI**: Press **TAB** to toggle the interface.
--   **Record**: Press **R** to start/stop capturing a video of your performance.
+| Key | Action |
+|-----|--------|
+| `H` | Hide / show sidebar |
+| `F` | Fullscreen |
+| `R` | Record toggle |
+| `S` | Snapshot (4K PNG) |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
 
 ---
 
-## 🏗️ For Developers
+## 📥 Download
 
-1.  **Install & Run**:
-    ```bash
-    npm install
-    npm run dev
-    ```
-2.  **Package**:
-    ```bash
-    npm run dist
-    ```
-3.  **Configuration**:
-    -   Tune UI sliders (min/max/step) in `src/config/uiConfig.js`.
-4.  **Roadmap**:
-    See [ROADMAP.md](./ROADMAP.md) for future plans and milestones.
+Windows installer on the [Releases page](https://github.com/GRAHAMTON/Lumenlab/releases).
 
+> Windows SmartScreen may flag this as an unknown app — click **More Info → Run Anyway**.
+
+---
+
+## 🏗️ Dev Setup
+
+```bash
+npm install
+npm run dev          # Vite dev server on localhost:5173
+npm run electron     # Launch Electron (loads localhost:5173)
+npm run dist         # Build + package Windows NSIS installer → release/
+npm run test         # Vitest suite (18 tests)
+```
+
+**Key files:**
+
+| File | Role |
+|------|------|
+| `src/store/useStore.js` | All app state (Zustand) |
+| `src/components/CanvasGL.jsx` | Three.js canvas, shader uniforms, post-processing |
+| `src/components/Controls.jsx` | Sidebar UI |
+| `src/shaders/visualizer.frag` | All visual logic in GLSL |
+| `src/config/uiConfig.js` | Slider min/max/step config |
+| `src/presets.js` | Built-in preset definitions |
+| `electron/main.js` | Electron main process |
+
+See [ROADMAP.md](./ROADMAP.md) for upcoming Desktop, Web, and Mobile tracks.
 
 ---
 
 ## 📜 License
+
 GNU GPLv3
