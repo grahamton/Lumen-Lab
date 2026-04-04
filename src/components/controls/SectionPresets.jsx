@@ -37,6 +37,7 @@ export function SectionPresets({ onInteract }) {
         >
           EXPORT
         </button>
+      </div>
       <div className="flex gap-2 mt-2">
         <button
           onClick={() => { onInteract?.(); if (window.confirm('Reset all parameters to defaults?')) resetParams() }}
@@ -45,3 +46,6 @@ export function SectionPresets({ onInteract }) {
           RESET
         </button>
       </div>
+    </div>
+  )
+}
