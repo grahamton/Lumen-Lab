@@ -1,55 +1,68 @@
-# Lumen Lab Road Map
+# Lumen Lab — Roadmap
 
-This roadmap outlines major milestones and associated issues for future development. Milestones are sequenced roughly by priority and may overlap.
+Lumen Lab is expanding from a single Windows desktop app into a **family of products** across three platforms. This roadmap covers what's done, what's next, and the high-level plan for each track.
 
-## Milestone 1 – MIDI Control Integration
+---
 
-- [x] **Design MIDI architecture**: Research and select a cross‑platform MIDI library and decide how to map incoming MIDI messages to internal parameters.
-- [x] **Implement MIDI input**: Add support for reading MIDI events (note on/off, control change) and map them to visual engine controls such as generator parameters, effect intensities and presets.
-- [x] **MIDI mapping UI**: Provide a user interface for assigning MIDI controls to specific parameters; include save/load of MIDI mappings.
-- [x] **Cross‑platform testing**: Verify MIDI functionality on Windows, macOS and Linux; address latency and device compatibility issues.
+## ✅ Shipped (v1.1.0 — Desktop)
 
-## Milestone 2 – Generative Engine Expansion
+- Real-time GLSL visual synthesizer with 5 generators + image/video input
+- Kaleidoscope, mirror symmetry, warp modes (polar, log-polar)
+- Bloom, chromatic aberration, noise, edge detection, circle crop
+- MIDI learn, gamepad support, audio reactivity (mic + file)
+- Flat sidebar UI: single scrollable panel, no tabs
+- Undo/redo (Ctrl+Z), preset manager, snapshot animator
+- Drift mode, BPM-locked speed
+- WebM recording, 4K PNG export
+- Performance sweep: fine-grained Zustand selectors, debounced persist
 
-- [x] **Add new generators**: Implement additional mathematical generators such as fractal noise, cellular automata, Lissajous curves and reaction–diffusion patterns.
-- [ ] **User‑defined equations**: Allow advanced users to define custom formulas or GLSL shaders for generators via a scripting interface.
-- [x] **Optimize existing engines**: Profile and improve performance of existing generators; leverage GPU acceleration where possible.
-- [x] **Parameter modulation**: Enable modulation of generator parameters via internal LFOs, envelopes or MIDI/OSC input.
+---
 
-## Milestone 3 – Community Preset Library
+## 🖥️ Desktop (Electron) — Next
 
-- [x] **Preset format specification**: Define a versioned file format to save complete sessions, including generator settings, effects stack and MIDI mappings.
-- [x] **Import/export**: Implement import/export functionality and integrate with the preset manager so users can share configurations.
-- [ ] **Library repository**: Host a cloud‑accessible repository (e.g., GitHub Pages or a simple API) where users can browse and download presets.
-- [ ] **In‑app browser**: Build an interface within Lumen Lab to browse, search and download community presets.
+- [ ] macOS build (Apple Silicon + Intel)
+- [ ] Linux build (AppImage)
+- [ ] Auto-update mechanism (Electron updater)
+- [ ] OSC support for DAW/network control
+- [ ] Custom GLSL shader input (power-user escape hatch)
+- [ ] Community preset library (cloud browse + download)
+- [ ] Onboarding tutorial on first launch
 
-## Milestone 4 – UI and UX Improvements
+---
 
-- [x] **Interface refinement**: Improve layout and typography; ensure controls are intuitive and accessible.
-- [ ] **Onboarding tutorial**: Create a guided tutorial on first launch to introduce key concepts like generators, effects and controls.
-- [ ] **Theme customization**: Add light/dark modes and allow users to adjust UI color schemes.
-- [ ] **Performance optimizations**: Identify and eliminate UI bottlenecks; ensure responsive performance even with complex scenes.
+## 🌐 Web (PWA) — `lumenlab-web`
 
-## Milestone 5 – Extended Control & Integration
+A self-hosted Progressive Web App version — same engine, browser-native.
 
-- [ ] **OSC support**: Add support for Open Sound Control (OSC) to allow network‑based control and integration with DAWs and other visual tools.
-- [ ] **VST/AU plug‑in**: Explore building a plug‑in version of Lumen Lab that can run inside popular audio workstations, enabling synchronised visuals during music production.
-- [ ] **DMX/Lighting integration**: Investigate integration with lighting protocols (DMX, Art‑Net) to sync stage lights with visual output.
+- [ ] Scaffold new repo: `lumenlab-web` (Vite + React + PWA plugin)
+- [ ] Extract shared visual engine into `@lumenlab/core` package
+- [ ] Web Audio API input (mic + file upload)
+- [ ] Service worker + offline support
+- [ ] Touch-optimized controls (swipe, pinch)
+- [ ] Deploy to `lumenlab.app` (self-hosted, no App Store)
+- [ ] Share URL for snapshots (encode state in URL hash)
 
-## Milestone 6 – Documentation & Tutorials
+---
 
-- [x] **User guide**: Write comprehensive user documentation covering installation, controls, generator descriptions, MIDI mapping and export options.
-- [ ] **Developer docs**: Document code structure and contribute guidelines to encourage community contributions.
-- [ ] **Video tutorials**: Produce short tutorial videos demonstrating setup, creating visuals, using MIDI control and sharing presets.
+## 📱 Mobile (React Native) — `lumenlab-mobile`
 
-## Milestone 7 – Cross‑Platform Packaging
+Native mobile app for iOS and Android.
 
-- [ ] **macOS build**: Package and distribute Lumen Lab for macOS using Electron/Node packaging tools; test on Apple Silicon and Intel systems.
-- [ ] **Linux build**: Create a Linux build (AppImage or Flatpak) and verify compatibility with major distributions.
-- [ ] **Auto‑update**: Integrate an auto‑update mechanism to notify users of new releases and install updates seamlessly.
+- [ ] Scaffold new repo: `lumenlab-mobile` (Expo + React Native)
+- [ ] WebGL renderer via `expo-gl` or `react-native-wgpu`
+- [ ] Port shader pipeline to mobile-compatible GLSL
+- [ ] Touch gestures: pinch-to-scale, rotate, swipe generator
+- [ ] Camera input as live texture source
+- [ ] Haptic feedback on beat / audio peak
+- [ ] App Store + Play Store submission
+- [ ] Simplified preset-focused UI (consumer-grade)
 
-## Milestone 8 – Beta Release & Feedback
+---
 
-- [ ] **Feature freeze**: Stabilize the codebase and freeze features for the beta release.
-- [x] **Bug tracking** (Reset Logic & Crash Fixes Verified)
-- [x] **Feedback integration** (LFO, Flux, Tunnels): Prioritize and address critical feedback, focusing on stability, performance and usability.
+## 🔧 Shared / Infrastructure
+
+- [ ] `@lumenlab/core` — shared shader + state package (extracted from desktop)
+- [ ] GitHub Actions CI: lint + test on all PRs
+- [ ] Versioned preset format (cross-platform compatible)
+- [ ] Developer docs + contribution guide
+- [ ] Video tutorials (setup, generators, MIDI, sharing)

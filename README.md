@@ -61,9 +61,6 @@
     ```bash
     npm run dist
     ```
-    ```bash
-    npm run dist
-    ```
 3.  **Configuration**:
     -   Tune UI sliders (min/max/step) in `src/config/uiConfig.js`.
 4.  **Roadmap**:

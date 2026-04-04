@@ -19,7 +19,6 @@ export const interpolateState = (s1, s2, t) => {
   const w1 = s1.warp || {}; const w2 = s2.warp || {}
   const d1 = s1.displacement || {}; const d2 = s2.displacement || {}
   const til1 = s1.tiling || {}; const til2 = s2.tiling || {}
-  const m1 = s1.masking || {}; const m2 = s2.masking || {}
   const c1 = s1.color || {}; const c2 = s2.color || {}
   const eff1 = s1.effects || {}; const eff2 = s2.effects || {}
   const gen1 = s1.generator || {}; const gen2 = s2.generator || {}
@@ -45,19 +44,9 @@ export const interpolateState = (s1, s2, t) => {
     tiling: {
       type: t < 0.5 ? (til1.type || 'none') : (til2.type || til1.type || 'none'),
       scale: lerp(til1.scale ?? 1, til2.scale ?? 1, t),
-      overlap: lerp(til1.overlap || 0, til2.overlap || 0, t),
-    },
-    masking: {
-      lumaThreshold: lerp(m1.lumaThreshold || 0, m2.lumaThreshold || 0, t),
-      centerRadius: lerp(m1.centerRadius || 0, m2.centerRadius || 0, t),
-      invertLuma: t < 0.5 ? !!m1.invertLuma : !!m2.invertLuma,
-      feather: lerp(m1.feather || 0, m2.feather || 0, t),
     },
     color: {
       posterize: lerp(c1.posterize || 256, c2.posterize || 256, t),
-      r: lerp(c1.r ?? 1.0, c2.r ?? 1.0, t),
-      g: lerp(c1.g ?? 1.0, c2.g ?? 1.0, t),
-      b: lerp(c1.b ?? 1.0, c2.b ?? 1.0, t),
       hue: lerp(c1.hue ?? 0.0, c2.hue ?? 0.0, t),
       sat: lerp(c1.sat ?? 1.0, c2.sat ?? 1.0, t),
       light: lerp(c1.light ?? 1.0, c2.light ?? 1.0, t),
