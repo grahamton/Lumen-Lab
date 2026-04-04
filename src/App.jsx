@@ -53,8 +53,7 @@ function App() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
 
       switch (e.key.toLowerCase()) {
-        case 'tab':
-          e.preventDefault()
+        case 'h':
           store.toggleControls(!store.ui.controlsOpen)
           break
         case 's':
@@ -102,7 +101,7 @@ function App() {
       {!useStore((state) => state.ui.controlsOpen) && (
         <button
           onClick={() => useStore.getState().toggleControls(true)}
-          title="Show panel (Tab)"
+          title="Show panel (H)"
           className="fixed top-4 left-4 z-40 px-3 py-2 bg-neutral-900/90 hover:bg-neutral-800 text-cyan-400 font-bold tracking-widest text-xs rounded border border-neutral-700 hover:border-cyan-400 backdrop-blur transition-all"
         >
           ☰ LUMEN LAB

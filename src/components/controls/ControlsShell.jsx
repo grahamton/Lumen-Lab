@@ -71,7 +71,7 @@ export function ControlsShell({ className = '' }) {
           </button>
           <button
             onClick={() => toggleControls(false)}
-            title="Hide panel (Tab)"
+            title="Hide panel (H)"
             aria-label="Hide panel"
             className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-cyan-400 hover:bg-neutral-800 transition-colors text-sm"
           >
