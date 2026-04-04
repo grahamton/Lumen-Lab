@@ -7,6 +7,8 @@ function Toggle({ label, isOn, onToggle }) {
       <span className="text-[9px] tracking-widest text-neutral-500">{label}</span>
       <button
         onClick={onToggle}
+        role="switch"
+        aria-checked={isOn}
         className={`w-7 h-3.5 rounded-full relative transition-colors ${isOn ? 'bg-cyan-950 border border-cyan-400' : 'bg-neutral-700'}`}
       >
         <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-transform ${isOn ? 'translate-x-3.5 bg-cyan-400' : 'translate-x-0.5 bg-neutral-500'}`} />
@@ -48,7 +50,7 @@ export function SectionEffects({ onInteract }) {
       <Toggle
         label="CIRCLE CROP"
         isOn={circleCrop}
-        onToggle={wrap(() => setCanvas('shape', circleCrop ? 'rect' : 'circle'))}
+        onToggle={wrap(() => setCanvas('shape', circleCrop ? 'rectangle' : 'circle'))}
       />
     </div>
   )

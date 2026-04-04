@@ -2,10 +2,11 @@ import { useRef } from 'react'
 import { useStore } from '../../store/useStore'
 import { CONTROLS } from '../../config/uiConfig'
 
-const GENERATORS = ['fibonacci', 'voronoi', 'grid', 'liquid', 'plasma', 'fractal']
+// fractal generator exists in engine but has no UI params yet
+const GENERATORS = ['fibonacci', 'voronoi', 'grid', 'liquid', 'plasma']
 const GEN_LABELS = {
   fibonacci: 'FIBONACCI', voronoi: 'VORONOI', grid: 'GRID',
-  liquid: 'LIQUID', plasma: 'PLASMA', fractal: 'FRACTAL',
+  liquid: 'LIQUID', plasma: 'PLASMA',
 }
 
 function KnobSlider({ label, section, param, value, onChange }) {
@@ -32,6 +33,7 @@ function KnobSlider({ label, section, param, value, onChange }) {
           step={cfg.step}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
+          aria-label={label}
           className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
         />
       </div>
@@ -61,12 +63,12 @@ export function TopStrip() {
       vid.loop = true
       vid.muted = true
       vid.playsInline = true
-      vid.addEventListener('loadeddata', () => { resetForUpload(); setImage(vid) }, { once: true })
+      vid.addEventListener('loadeddata', () => { URL.revokeObjectURL(url); resetForUpload(); setImage(vid) }, { once: true })
       vid.load()
     } else {
       const img = new Image()
       img.src = url
-      img.addEventListener('load', () => { resetForUpload(); setImage(img) }, { once: true })
+      img.addEventListener('load', () => { URL.revokeObjectURL(url); resetForUpload(); setImage(img) }, { once: true })
     }
   }
 
@@ -74,10 +76,11 @@ export function TopStrip() {
     <div className="px-3 pt-3 pb-2 border-b border-neutral-800 bg-neutral-900/20 shrink-0">
       <p className="text-[8px] text-cyan-400 tracking-[3px] mb-2">GENERATOR</p>
       <div className="grid grid-cols-3 gap-1 mb-3">
-        {GENERATORS.slice(0, 5).map((g) => (
+        {GENERATORS.map((g) => (
           <button
             key={g}
             onClick={() => setGenerator('type', g)}
+            aria-pressed={generator.type === g}
             className={`py-1.5 rounded text-[8px] tracking-wider border transition-colors ${
               generator.type === g
                 ? 'bg-cyan-950 border-cyan-400 text-cyan-400'
