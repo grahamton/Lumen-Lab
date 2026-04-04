@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Controls } from './components/Controls'
+import { ControlsShell } from './components/controls/ControlsShell'
 import { HelpModal } from './components/HelpModal'
 import { useAnimator } from './hooks/useAnimator'
 import { useGamepad } from './hooks/useGamepad'
@@ -35,10 +35,22 @@ function App() {
     midiManager.init()
 
     const handleKeyDown = (e) => {
+      const store = useStore.getState()
+
+      // Undo / Redo (always works, even with input focus)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        store.undo()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        store.redo()
+        return
+      }
+
       // Ignore if typing in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-
-      const store = useStore.getState()
 
       switch (e.key.toLowerCase()) {
         case 'tab':
@@ -76,7 +88,7 @@ function App() {
           <LazyCanvas />
         </Suspense>
       </ErrorBoundary>
-      <Controls />
+      <ControlsShell />
       {/* Blank state helper */}
       {!useStore((state) => state.image || (state.generator?.type && state.generator.type !== 'none')) && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
