@@ -2,6 +2,33 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { CONTROLS } from '../config/uiConfig'
 
+function debounce(fn, ms) {
+  let timer
+  let pending = null
+
+  const debounced = (...args) => {
+    pending = args
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      fn(...pending)
+      pending = null
+    }, ms)
+  }
+
+  debounced.flush = () => {
+    if (pending) {
+      clearTimeout(timer)
+      fn(...pending)
+      pending = null
+    }
+  }
+
+  return debounced
+}
+
+// Exposed so resetAll can flush any pending persist write before wiping localStorage
+let flushPersist = () => {}
+
 const SCHEMA_VERSION = 3
 
 const DEFAULTS = {
@@ -467,14 +494,24 @@ export const useStore = create(
 
       // Factory Reset: Wipes EVERYTHING including user presets
       resetAll: () => {
-        localStorage.clear() // Clear persistent storage
-        set({ ...DEFAULTS }) // Reset in-memory state
+        flushPersist()         // drain any pending debounced write before wiping
+        localStorage.clear()
+        set({ ...DEFAULTS })
       },
 
     }),
     {
       name: 'lumen-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        const debouncedSetItem = debounce((key, value) => localStorage.setItem(key, value), 500)
+        flushPersist = () => debouncedSetItem.flush()
+        window.addEventListener('beforeunload', () => debouncedSetItem.flush(), { once: true })
+        return {
+          getItem:    (key) => localStorage.getItem(key),
+          setItem:    debouncedSetItem,
+          removeItem: (key) => localStorage.removeItem(key),
+        }
+      }),
       partialize: (state) => ({
         schemaVersion: state.schemaVersion,
         transforms: state.transforms,
