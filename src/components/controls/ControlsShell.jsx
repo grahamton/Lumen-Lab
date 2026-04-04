@@ -34,7 +34,9 @@ export function ControlsShell({ className = '' }) {
 
   function handleInteract(id) {
     setActiveSection(id)
-    setUi('lastActiveSection', id)
+    if (id !== activeSection) {
+      setUi('lastActiveSection', id)
+    }
     setOpenSections((prev) => {
       if (prev.has(id)) return prev
       return new Set([...prev, id])
@@ -51,6 +53,7 @@ export function ControlsShell({ className = '' }) {
             onClick={undo}
             disabled={undoStack.length === 0}
             title="Undo"
+            aria-label="Undo"
             className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-cyan-400 hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
           >
             ↩
@@ -59,6 +62,7 @@ export function ControlsShell({ className = '' }) {
             onClick={redo}
             disabled={redoStack.length === 0}
             title="Redo"
+            aria-label="Redo"
             className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-cyan-400 hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
           >
             ↪
@@ -89,6 +93,7 @@ export function ControlsShell({ className = '' }) {
       <div className="flex gap-2 px-3 py-2.5 border-t border-neutral-800 shrink-0">
         <button
           onClick={() => setUi('globalPause', !ui.globalPause)}
+          aria-pressed={ui.globalPause}
           className={`flex-1 py-1.5 rounded text-[9px] tracking-widest font-semibold border transition-colors ${
             ui.globalPause
               ? 'bg-cyan-400 border-cyan-400 text-neutral-900'
@@ -99,6 +104,8 @@ export function ControlsShell({ className = '' }) {
         </button>
         <button
           onClick={() => setRecording('isActive', !recording.isActive)}
+          aria-pressed={recording.isActive}
+          aria-label={recording.isActive ? 'Stop recording' : 'Start recording'}
           className={`flex-1 py-1.5 rounded text-[9px] tracking-widest font-semibold border transition-colors ${
             recording.isActive
               ? 'bg-red-500 border-red-500 text-white'

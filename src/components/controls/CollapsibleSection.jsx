@@ -3,6 +3,7 @@ export function CollapsibleSection({ id, title, isOpen, isActive, onToggle, chil
     <div className="border-b border-neutral-800">
       <button
         onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-neutral-800/50 transition-colors"
       >
         <div className="flex items-center gap-2">
