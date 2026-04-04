@@ -71,6 +71,7 @@ The top strip contains a 2×3 grid: **5 named generator buttons** (Voronoi, Plas
 - Symmetry Slices (1–16)
 - Rotation
 - Warp amount
+- Warp mode: None / Polar / Log-Polar (3-way selector)
 - Tiling on/off toggle
 - Displacement X/Y
 
@@ -92,7 +93,12 @@ The top strip contains a 2×3 grid: **5 named generator buttons** (Voronoi, Plas
 ### MOTION
 - Animate toggle (global play/pause)
 - BPM / tempo
-- Flux toggle + intensity (auto-drift)
+- Flux toggle + intensity (auto-drifts all params slowly)
+
+### KEYBOARD SHORTCUTS
+- `Ctrl+Z` — undo (up to 20 steps)
+- `Ctrl+Shift+Z` — redo
+- No undo/redo UI exposed; keyboard only
 
 ### PRESETS
 - 2×N grid of named presets (built-in + user)
@@ -118,14 +124,16 @@ These features are **deleted from the codebase entirely**, not hidden:
 |---------|-----------------|
 | LFO matrix (6 LFOs with assign/rate/depth) | Global tab → Animation section |
 | Masking controls (threshold, feather, invert) | Source tab → Masking section |
-| Warp type selector (Sinusoidal / Radial / Twist / etc.) | Geometry tab → Warp section |
 | Individual RGB sliders (R, G, B separate) | Effects tab → Color section |
 | Tiling overlap slider | Geometry tab → Tiling section |
 | Undo history UI (step list, revert button) | Global tab |
-| Projection shape (Flat / Sphere / Cylinder) | Global tab → Output section |
 | Sequencer (timeline steps, mode, transition time) | Global tab |
 
-**Rationale:** LFOs and the Sequencer are powerful but rarely used and add significant mental overhead. Masking and projection shape are niche. Individual RGB + tiling overlap are accessible through Hue + Saturation instead. Undo is still in-store but not exposed in the UI (keyboard shortcut only).
+**Rationale:** LFO matrix and Sequencer are powerful but add too much complexity for a general audience — Flux covers the "auto-animate" need. Masking is replaced by Circle Crop toggle. Individual RGB + tiling overlap are accessible via Hue/Saturation. Undo gets keyboard shortcuts instead of a UI panel. Warp type selector is kept (Polar/Log-Polar are visually distinct and worth exposing).
+
+## Accessibility
+
+**Strobe safety** is on by default. The app caps minimum animation transition time at 500ms (≤2 flashes/sec, safely under the WCAG 2.1 3Hz limit). This is a hardcoded default — no UI toggle. Advanced users can disable via a hidden config/settings path if added later. Applies to all animated parameter changes.
 
 ---
 
@@ -153,22 +161,23 @@ Old `Controls.jsx` is deleted after migration.
 
 - Remove `lfo` state section entirely
 - Remove `masking` state section entirely
-- Remove `history` state section entirely (keep `resetAll`, remove step tracking)
-- Remove from `warp`: `type` field (keep `amount`)
+- Remove `history` state section — replace with proper undo/redo stack; keep `undo()` and add `redo()`
 - Remove from `color`: `r`, `g`, `b` individual fields (keep `hue`, `saturation`, `brightness`, `contrast`)
 - Remove from `tiling`: `overlap` field
+- Keep `warp.type` (used by Polar/Log-Polar selector)
 - Add to `ui`: `lastActiveSection: 'geometry'`
 - Bump `SCHEMA_VERSION` to force reset of stale persisted state
 
 ### Config Changes (`uiConfig.js`)
-Remove entries for: LFO params, masking params, warp type, RGB individual, tiling overlap, projection shape.
+Remove entries for: LFO params, masking params, RGB individual, tiling overlap.
 
 ### Shader Changes (`visualizer.frag`)
 Remove uniforms that were exclusively driven by removed features:
 - `uMaskThreshold`, `uMaskFeather`, `uMaskInvert`
 - `uLfo1...uLfo6` (all 6 LFO uniforms)
-- `uWarpType` (integer select)
-- `uProjectionShape`
+- `uProjectionShape` (replaced by `uShape` boolean for circle crop)
+
+Keep: `uWarpType` (used by Polar/Log-Polar selector in Geometry section)
 
 ---
 
@@ -181,11 +190,12 @@ Follows existing Tailwind dark palette: `bg-neutral-800/900`, `text-cyan-400`, `
 ## What Is NOT Changed
 
 - Canvas, Three.js pipeline, EffectComposer — untouched
-- MIDI learn system — preserved and still works on any visible control
-- Keyboard shortcuts — unchanged (Tab hides sidebar, S snapshot, R record, F fullscreen)
-- Preset system data format — presets still work; just the UI that displays them changes
+- MIDI learn system — preserved and works on any visible control
+- Keyboard shortcuts — Tab (toggle sidebar), S (snapshot), R (record), F (fullscreen), **Ctrl+Z (undo), Ctrl+Shift+Z (redo)** — last two are new
+- Preset system data format — presets still load correctly
 - Electron main process — untouched
 - All shader visual math — only removed uniforms change
+- Strobe safety cap (500ms minimum transition) — on by default, no UI toggle
 
 ---
 
