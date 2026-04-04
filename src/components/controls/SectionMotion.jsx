@@ -34,12 +34,12 @@ export function SectionMotion({ onInteract }) {
       />
       <ControlGroup
         section="animation"
-        param="bpm"
+        param="speed"
         value={animation.bpm}
         onChange={wrap((v) => setAnimation('bpm', v))}
       />
       <Toggle
-        label="FLUX"
+        label="DRIFT"
         isOn={flux.enabled}
         onToggle={wrap(() => setFlux('enabled', !flux.enabled))}
       />

@@ -334,14 +334,14 @@ void main() {
 
     // --- COLOR GRADING (RGB & HSL) ---
 
-    // 2. HSL Grading
-    if (uColorHSL.x != 0.0 || uColorHSL.y != 1.0 || uColorHSL.z != 1.0) {
+    // 2. HSL Grading — always apply, use additive injection so grayscale generators get colorized
+    {
         vec3 hsb = rgb2hsb(color);
-        // Hue (Offset)
+        // Hue: offset
         hsb.x = fract(hsb.x + uColorHSL.x);
-        // Saturation (Multiplier)
-        hsb.y = clamp(hsb.y * uColorHSL.y, 0.0, 1.0);
-        // Lightness (Multiplier on Brightness/Value)
+        // Saturation: additive offset from neutral (1.0 = no change, >1 injects color into grayscale)
+        hsb.y = clamp(hsb.y + (uColorHSL.y - 1.0), 0.0, 1.0);
+        // Brightness: multiplier
         hsb.z = clamp(hsb.z * uColorHSL.z, 0.0, 1.0);
         color = hsb2rgb(hsb);
     }

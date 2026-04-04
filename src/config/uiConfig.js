@@ -21,7 +21,7 @@ export const CONTROLS = {
   },
   color: {
     hue:       { min: -1.0, max: 1.0, step: 0.01, label: 'Hue' },
-    sat:       { min: 0,    max: 3.0, step: 0.05, label: 'Saturation' },
+    sat:       { min: 0,    max: 2.0, step: 0.05, label: 'Saturation' },
     light:     { min: 0,    max: 2.0, step: 0.05, label: 'Brightness' },
     posterize: { min: 2,    max: 32,  step: 1,    label: 'Posterize' },
   },
@@ -33,7 +33,7 @@ export const CONTROLS = {
     amount: { min: 0, max: 1, step: 0.01, label: 'Intensity' },
   },
   animation: {
-    bpm: { min: 40, max: 240, step: 1, label: 'BPM' },
+    speed: { min: 20, max: 200, step: 1, label: 'Speed' },
   },
   audio: {
     sensitivity: { min: 0, max: 3, step: 0.05, label: 'Sensitivity' },
