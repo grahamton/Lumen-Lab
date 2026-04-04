@@ -400,7 +400,7 @@ export const useStore = create(
         const snapshot = {
           transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
           displacement: state.displacement, tiling: state.tiling, generator: state.generator,
-          color: state.color, effects: state.effects, canvas: state.canvas, flux: state.flux,
+          color: state.color, effects: state.effects, canvas: state.canvas,
         }
         return {
           undoStack: [snapshot, ...state.undoStack].slice(0, 20),
@@ -414,7 +414,7 @@ export const useStore = create(
         const current = {
           transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
           displacement: state.displacement, tiling: state.tiling, generator: state.generator,
-          color: state.color, effects: state.effects, canvas: state.canvas, flux: state.flux,
+          color: state.color, effects: state.effects, canvas: state.canvas,
         }
         return { ...previous, undoStack: rest, redoStack: [current, ...state.redoStack].slice(0, 20) }
       }),
@@ -425,7 +425,7 @@ export const useStore = create(
         const current = {
           transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
           displacement: state.displacement, tiling: state.tiling, generator: state.generator,
-          color: state.color, effects: state.effects, canvas: state.canvas, flux: state.flux,
+          color: state.color, effects: state.effects, canvas: state.canvas,
         }
         return { ...next, redoStack: rest, undoStack: [current, ...state.undoStack].slice(0, 20) }
       }),
@@ -436,7 +436,6 @@ export const useStore = create(
 
       // --- RESET ACTIONS ---
 
-      // Soft Reset: Closes params but keeps global settings and timeline
       // Soft Reset: Closes params but keeps global settings and timeline
       resetParams: () => {
         const { pushUndo } = get()

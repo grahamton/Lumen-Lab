@@ -74,12 +74,7 @@ function VisualizerScene() {
     uTilingType: { value: 0 }, // 0=none
     uTilingScale: { value: 1 },
     uTilingOverlap: { value: 0 }, // 0-1 blend between tiled/original UVs
-    uMaskThreshold: { value: 0 },
-    uMaskRadius: { value: 0 },
-    uMaskInvert: { value: 0 },
-    uMaskFeather: { value: 0 },
     uPosterize: { value: 256 },
-    uColorRGB: { value: new THREE.Vector3(1, 1, 1) },
     uColorHSL: { value: new THREE.Vector3(0, 1, 1) },
     uEffects: { value: new THREE.Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
     uGenType: { value: 0 },
@@ -138,7 +133,7 @@ function VisualizerScene() {
     const uniformValues = uniforms
     const {
       transforms, symmetry, warp, displacement, tiling,
-      masking, color, effects, generator, audio: audioState, lfo, ui
+      color, effects, generator, audio: audioState, ui
     } = useStore.getState() // Access fresh state without re-render
 
     // Time Logic: Always translate global time
@@ -171,34 +166,7 @@ function VisualizerScene() {
     uniformValues.uAudioHigh.value = high
 
     // --- LFO LOGIC ---
-    let lfoMods = { rotation: 0, scale: 0 } // Add more targets as needed
-
-    // Flux acts as a Master Switch for LFOs here
-    if (lfo.active || fluxEnabled) {
-      // Use defaults if empty (safety)
-      const oscillators = lfo.oscillators.length > 0 ? lfo.oscillators : [
-        { type: 'sine', target: 'transforms.scale', freq: 0.5, amp: 0.05, offset: 0 }
-      ]
-
-      oscillators.forEach(osc => {
-        // Calculate Wave
-        let val = 0
-        const t = timeRef.current
-        // Basic Waveforms
-        if (osc.type === 'sine') val = Math.sin(t * osc.freq * Math.PI * 2 + osc.offset)
-        else if (osc.type === 'square') val = Math.sign(Math.sin(t * osc.freq * Math.PI * 2 + osc.offset))
-        else if (osc.type === 'triangle') val = Math.asin(Math.sin(t * osc.freq * Math.PI * 2 + osc.offset)) / (Math.PI / 2)
-        else if (osc.type === 'saw') val = (t * osc.freq + osc.offset / (Math.PI * 2)) % 1.0 * 2 - 1
-
-        // Scale by Amp
-        val *= osc.amp
-
-        // Apply to Targets (Mapping)
-        // Ideally this should be a robust map, for now hardcoding common ones
-        if (osc.target === 'transforms.rotation') lfoMods.rotation += val
-        if (osc.target === 'transforms.scale') lfoMods.scale += val
-      })
-    }
+    const lfoMods = { rotation: 0, scale: 0 }
 
     // --- UNIFORM UPDATES ---
 
@@ -234,7 +202,6 @@ function VisualizerScene() {
     uniformValues.uTilingOverlap.value = tiling.overlap || 0
 
     uniformValues.uPosterize.value = color.posterize
-    uniformValues.uColorRGB.value.set(color.r, color.g, color.b)
     uniformValues.uColorHSL.value.set(color.hue, color.sat, color.light)
 
     // Effects react to highs?
@@ -252,12 +219,6 @@ function VisualizerScene() {
 
     uniformValues.uGenType.value = genMap[generator.type] || 0
     uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
-
-    // Masking uniforms
-    uniformValues.uMaskThreshold.value = masking.lumaThreshold || 0
-    uniformValues.uMaskRadius.value = masking.centerRadius || 0
-    uniformValues.uMaskInvert.value = masking.invertLuma ? 1 : 0
-    uniformValues.uMaskFeather.value = masking.feather || 0
 
     // Audio meters to store (throttled)
     const now = timeRef.current

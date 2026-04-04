@@ -831,8 +831,8 @@ export function Controls() {
         <div className="flex gap-1">
           <button
             onClick={store.undo}
-            disabled={store.history?.length === 0}
-            className={`p-1.5 rounded transition-all ${store.history?.length > 0 ? 'text-cyan-400 hover:bg-neutral-800' : 'text-neutral-700 cursor-not-allowed'}`}
+            disabled={store.undoStack?.length === 0}
+            className={`p-1.5 rounded transition-all ${store.undoStack?.length > 0 ? 'text-cyan-400 hover:bg-neutral-800' : 'text-neutral-700 cursor-not-allowed'}`}
             title="Undo (Ctrl+Z)"
           >
             <Undo2 size={14} />
