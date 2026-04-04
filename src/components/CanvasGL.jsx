@@ -133,7 +133,7 @@ function VisualizerScene() {
     const uniformValues = uniforms
     const {
       transforms, symmetry, warp, displacement, tiling,
-      color, effects, generator, audio: audioState, ui
+      color, effects, generator, audio: audioState, ui, flux
     } = useStore.getState() // Access fresh state without re-render
 
     // Time Logic: Always translate global time
@@ -165,8 +165,15 @@ function VisualizerScene() {
     uniformValues.uAudioMid.value = mid
     uniformValues.uAudioHigh.value = high
 
-    // --- LFO LOGIC ---
-    const lfoMods = { rotation: 0, scale: 0 }
+    // --- FLUX DRIFT LOGIC ---
+    let fluxDrift = { rotation: 0, scale: 0 }
+    if (flux?.enabled) {
+      const fluxAmount = flux.amount ?? 0.3
+      // Use time-based Perlin-like noise for smooth drifting
+      const driftSpeed = 0.3 // Slow drift frequency
+      fluxDrift.scale = Math.sin(timeRef.current * driftSpeed) * fluxAmount
+      fluxDrift.rotation = Math.cos(timeRef.current * driftSpeed * 0.7) * fluxAmount
+    }
 
     // --- UNIFORM UPDATES ---
 
@@ -175,13 +182,13 @@ function VisualizerScene() {
     const rMid = audioState.reactivity?.mid ?? 1.0
     const rHigh = audioState.reactivity?.high ?? 1.0
 
-    const reactiveScale = transforms.scale + (bass * rBass * 0.2) + lfoMods.scale
+    const reactiveScale = transforms.scale + (bass * rBass * 0.2) + fluxDrift.scale
 
     uniformValues.uTransforms.value.set(
       transforms.x,
       transforms.y,
       reactiveScale,
-      transforms.rotation + (mid * rMid * 0.01) + lfoMods.rotation
+      transforms.rotation + (mid * rMid * 0.01) + fluxDrift.rotation
     )
 
     uniformValues.uShape.value = shape === 'circle' ? 1 : 0
