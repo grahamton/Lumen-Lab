@@ -1,0 +1,102 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - button "Undo (Ctrl+Z)" [disabled] [ref=e8]:
+        - img [ref=e9]
+      - button "Reset Parameters (Soft Reset)" [ref=e12]:
+        - img [ref=e13]
+    - generic [ref=e16]:
+      - button "RAIL" [ref=e17]
+      - button "FLOAT" [ref=e18]
+    - button "Settings" [ref=e19]:
+      - img [ref=e20]
+  - generic [ref=e23]: State reset after update
+  - generic [ref=e24]:
+    - button [ref=e25]:
+      - img [ref=e26]
+    - button [active] [ref=e29]:
+      - img [ref=e30]
+    - button [ref=e35]:
+      - img [ref=e36]
+    - button [ref=e38]:
+      - img [ref=e39]
+  - generic [ref=e323]:
+    - generic [ref=e324]:
+      - generic [ref=e325]:
+        - img [ref=e326]
+        - text: Transforms
+      - generic [ref=e330]:
+        - generic [ref=e331]:
+          - generic [ref=e332]: Scale
+          - generic [ref=e333]: "1.00"
+        - slider [ref=e334] [cursor=pointer]: "1"
+      - generic [ref=e335]:
+        - generic [ref=e336]:
+          - generic [ref=e337]: Rotation
+          - generic [ref=e338]: "0"
+        - slider [ref=e339] [cursor=pointer]: "0"
+      - generic [ref=e340]:
+        - generic [ref=e341]:
+          - generic [ref=e342]: Position X
+          - generic [ref=e343]: "0"
+        - slider [ref=e344] [cursor=pointer]: "0"
+      - generic [ref=e345]:
+        - generic [ref=e346]:
+          - generic [ref=e347]: Position Y
+          - generic [ref=e348]: "0"
+        - slider [ref=e349] [cursor=pointer]: "0"
+    - generic [ref=e350]:
+      - generic [ref=e351]:
+        - img [ref=e352]
+        - text: Tiling
+      - generic [ref=e357]:
+        - button "None" [ref=e358]
+        - button "Grid" [ref=e359]
+        - button "Spin" [ref=e360]
+        - button "Mirror" [ref=e361]
+      - generic [ref=e362]:
+        - generic [ref=e363]:
+          - button "none" [ref=e364]
+          - button "p1" [ref=e365]
+          - button "p2" [ref=e366]
+          - button "p4m" [ref=e367]
+        - generic [ref=e368]:
+          - generic [ref=e369]:
+            - generic [ref=e370]: Tile Scale
+            - generic [ref=e371]: "1.00"
+          - slider [ref=e372] [cursor=pointer]: "1"
+    - generic [ref=e373]:
+      - generic [ref=e374]:
+        - img [ref=e375]
+        - text: Symmetry & Distortion
+      - generic [ref=e380]:
+        - button "Off" [ref=e381]
+        - button "Radial 6" [ref=e382]
+        - button "Mirror X" [ref=e383]
+        - button "Mirror Y" [ref=e384]
+      - generic [ref=e385]:
+        - generic [ref=e386]: Enable Symmetry
+        - button [ref=e387]
+      - generic [ref=e389]:
+        - generic [ref=e391]: Liquify
+        - generic [ref=e392]:
+          - generic [ref=e393]:
+            - generic [ref=e394]: Amount
+            - generic [ref=e395]: "0"
+          - slider [ref=e396] [cursor=pointer]: "0"
+        - generic [ref=e397]:
+          - generic [ref=e398]:
+            - generic [ref=e399]: Frequency
+            - generic [ref=e400]: "10.00"
+          - slider [ref=e401] [cursor=pointer]: "10"
+      - generic [ref=e402]:
+        - generic [ref=e403]: Warp Type
+        - generic [ref=e404]:
+          - button "None" [ref=e405]
+          - button "Polar" [ref=e406]
+          - button "Log Polar" [ref=e407]
+        - generic [ref=e408]:
+          - button "none" [ref=e409]
+          - button "polar" [ref=e410]
+          - button "log-polar" [ref=e411]
+  - heading "Lumen Lab v0.6" [level=1] [ref=e74]

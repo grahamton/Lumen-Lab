@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { CONTROLS } from '../config/uiConfig'
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 const DEFAULTS = {
   schemaVersion: SCHEMA_VERSION,
@@ -14,7 +14,7 @@ const DEFAULTS = {
     rotation: 0,
   },
   symmetry: {
-    enabled: false,
+    enabled: true,
     type: 'radial',
     slices: 6,
     offset: 0,
@@ -26,16 +26,9 @@ const DEFAULTS = {
     amp: 0,
     freq: 10,
   },
-  masking: {
-    lumaThreshold: 0,
-    centerRadius: 0,
-    invertLuma: false,
-    feather: 0.0,
-  },
   tiling: {
     type: 'none',
     scale: 1.0,
-    overlap: 0.0,
   },
   generator: {
     type: 'none',
@@ -46,9 +39,7 @@ const DEFAULTS = {
   },
   color: {
     posterize: 32,
-    r: 1.0, g: 1.0, b: 1.0,
     hue: 0.0, sat: 1.0, light: 1.0,
-    // Add default values if not present in DEFAULTS but present in CONTROLS
   },
   effects: {
     edgeDetect: 0,
@@ -70,23 +61,12 @@ const DEFAULTS = {
   userPresets: [],
   animation: {
     isPlaying: false,
-    mode: 'loop',
     bpm: 120,
-    transitionTime: 2000,
-    easing: 'easeInOut',
-    activeStep: 0,
     strobeSafety: true,
   },
   flux: {
     enabled: false,
-  },
-  lfo: {
-    active: false,
-    oscillators: [
-      // Default Heartbeat for Flux
-      { type: 'sine', target: 'transforms.scale', freq: 0.5, amp: 0.05, offset: 0 },
-      { type: 'sine', target: 'transforms.rotation', freq: 0.1, amp: 0.1, offset: 1 }
-    ]
+    amount: 0.3,
   },
   audio: {
     enabled: false,
@@ -115,16 +95,18 @@ const DEFAULTS = {
     exportRequest: null,
     gamepadConnected: false,
     globalPause: false,
-    resumeOnStartup: true, // New Preference: Default to TRUE
+    resumeOnStartup: true,
     midiLearnActive: false,
-    midiLearnId: null, // The parameter path waiting for MIDI input
+    midiLearnId: null,
     resetNotice: null,
     lowResPreview: false,
     perfCapFx: false,
     lockGeometry: false,
+    lastActiveSection: 'geometry',
   },
   recording: { isActive: false, progress: 0 },
-  history: [],
+  undoStack: [],
+  redoStack: [],
 }
 
 export const useStore = create(
@@ -134,10 +116,6 @@ export const useStore = create(
 
       // --- Setters ---
       setImage: (img) => set({ image: img }),
-
-      setLfo: (key, value) => set((state) => ({
-        lfo: { ...state.lfo, [key]: value }
-      })),
 
       setMidi: (key, value) => {
         set((state) => {
@@ -246,7 +224,6 @@ export const useStore = create(
         animation: { ...state.animation, isPlaying: false },
         flux: { ...state.flux, enabled: false },
         audio: { ...state.audio, enabled: false },
-        lfo: { ...state.lfo, active: false }
       })),
 
       toggleControls: (isOpen) => set((state) => ({ ui: { ...state.ui, controlsOpen: isOpen } })),
@@ -257,7 +234,7 @@ export const useStore = create(
       // --- Actions ---
 
       randomize: () => {
-        get().pushHistory() // Auto-save
+        get().pushUndo()
         set((state) => {
           const rng = (min, max) => Math.random() * (max - min) + min
           const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
@@ -287,13 +264,6 @@ export const useStore = create(
             tiling: {
               type: tilingType,
               scale: rng(0.5, 1.5),
-              overlap: rng(0, 0.3),
-            },
-            masking: {
-              lumaThreshold: Math.random() > 0.7 ? rng(0, 50) : 0,
-              centerRadius: Math.random() > 0.7 ? rng(0, 40) : 0,
-              invertLuma: Math.random() > 0.5,
-              feather: rng(0, 0.4),
             },
             color: {
               ...state.color,
@@ -324,7 +294,6 @@ export const useStore = create(
           warp: { ...state.warp },
           displacement: { ...state.displacement },
           tiling: { ...state.tiling },
-          masking: { ...state.masking },
           color: { ...state.color },
           effects: { ...state.effects },
           generator: { ...state.generator },
@@ -345,7 +314,6 @@ export const useStore = create(
           warp: lock ? state.warp : { ...snap.warp },
           displacement: { ...snap.displacement },
           tiling: lock ? state.tiling : { ...snap.tiling },
-          masking: { ...snap.masking },
           color: { ...snap.color },
           effects: { ...snap.effects },
           generator: { ...snap.generator },
@@ -362,7 +330,6 @@ export const useStore = create(
             warp: { ...state.warp },
             displacement: { ...state.displacement },
             tiling: { ...state.tiling },
-            masking: { ...state.masking },
             color: { ...state.color },
             effects: { ...state.effects },
             generator: { ...state.generator },
@@ -393,10 +360,6 @@ export const useStore = create(
 
       setDisplacement: (key, value) => set((state) => ({
         displacement: { ...state.displacement, [key]: value }
-      })),
-
-      setMasking: (key, value) => set((state) => ({
-        masking: { ...state.masking, [key]: value }
       })),
 
       setRecording: (key, value) => set((state) => ({
@@ -433,32 +396,38 @@ export const useStore = create(
         return { audio: { ...state.audio, [key]: value } }
       }),
 
-      pushHistory: () => set((state) => {
-        const newHistory = [
-          {
-            transforms: { ...state.transforms },
-            symmetry: { ...state.symmetry },
-            warp: { ...state.warp },
-            displacement: { ...state.displacement },
-            tiling: { ...state.tiling },
-            masking: { ...state.masking },
-            color: { ...state.color },
-            effects: { ...state.effects },
-            generator: { ...state.generator },
-            animation: { ...state.animation }
-          },
-          ...state.history
-        ].slice(0, 20)
-        return { history: newHistory }
+      pushUndo: () => set((state) => {
+        const snapshot = {
+          transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
+          displacement: state.displacement, tiling: state.tiling, generator: state.generator,
+          color: state.color, effects: state.effects, canvas: state.canvas,
+        }
+        return {
+          undoStack: [snapshot, ...state.undoStack].slice(0, 20),
+          redoStack: [],
+        }
       }),
 
       undo: () => set((state) => {
-        if (state.history.length === 0) return {}
-        const [previous, ...rest] = state.history
-        return {
-          ...previous,
-          history: rest
+        if (state.undoStack.length === 0) return {}
+        const [previous, ...rest] = state.undoStack
+        const current = {
+          transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
+          displacement: state.displacement, tiling: state.tiling, generator: state.generator,
+          color: state.color, effects: state.effects, canvas: state.canvas,
         }
+        return { ...previous, undoStack: rest, redoStack: [current, ...state.redoStack].slice(0, 20) }
+      }),
+
+      redo: () => set((state) => {
+        if (state.redoStack.length === 0) return {}
+        const [next, ...rest] = state.redoStack
+        const current = {
+          transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
+          displacement: state.displacement, tiling: state.tiling, generator: state.generator,
+          color: state.color, effects: state.effects, canvas: state.canvas,
+        }
+        return { ...next, redoStack: rest, undoStack: [current, ...state.undoStack].slice(0, 20) }
       }),
 
       triggerExport: (req) => set((state) => ({
@@ -468,26 +437,21 @@ export const useStore = create(
       // --- RESET ACTIONS ---
 
       // Soft Reset: Closes params but keeps global settings and timeline
-      // Soft Reset: Closes params but keeps global settings and timeline
       resetParams: () => {
-        const { pushHistory } = get()
-        pushHistory()
+        const { pushUndo } = get()
+        pushUndo()
         set((state) => ({
           transforms: { ...DEFAULTS.transforms },
           symmetry: { ...DEFAULTS.symmetry },
           warp: { ...DEFAULTS.warp },
           displacement: { ...DEFAULTS.displacement },
-          masking: { ...DEFAULTS.masking },
           tiling: { ...DEFAULTS.tiling },
-          // Preserve the current generator type, but reset its parameters
           generator: { ...DEFAULTS.generator, type: state.generator.type },
           color: { ...DEFAULTS.color },
           effects: { ...DEFAULTS.effects },
-          // Keep global modulation/audio state when doing a soft reset
           flux: { ...state.flux },
-          lfo: { ...state.lfo },
           audio: { ...state.audio },
-          animation: { ...state.animation, isPlaying: false } // Stop playing but keep timeline
+          animation: { ...state.animation, isPlaying: false }
         }))
       },
 
@@ -517,7 +481,6 @@ export const useStore = create(
         symmetry: state.symmetry,
         warp: state.warp,
         displacement: state.displacement,
-        masking: state.masking,
         tiling: state.tiling,
         generator: state.generator,
         color: state.color,
@@ -529,7 +492,7 @@ export const useStore = create(
         flux: state.flux,
         animation: state.animation,
         ui: state.ui,
-        midi: state.midi, // Persist MIDI mappings
+        midi: state.midi,
       }),
       merge: (persistedState, currentState) => {
         const incomingVersion = persistedState?.schemaVersion

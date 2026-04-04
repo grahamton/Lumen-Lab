@@ -1,0 +1,265 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: Loading viewer...
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: LUMEN LAB
+      - generic [ref=e8]:
+        - button "Undo" [disabled] [ref=e9]: ↩
+        - button "Redo" [disabled] [ref=e10]: ↪
+    - generic [ref=e11]:
+      - paragraph [ref=e12]: GENERATOR
+      - generic [ref=e13]:
+        - button "FIBONACCI" [ref=e14]
+        - button "VORONOI" [ref=e15]
+        - button "GRID" [ref=e16]
+        - button "LIQUID" [ref=e17]
+        - button "PLASMA" [ref=e18]
+        - button "IMAGE" [ref=e19]
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - slider "SCALE" [ref=e25] [cursor=pointer]: "1"
+          - generic [ref=e26]: SCALE
+          - generic [ref=e27]: "1.00"
+        - generic [ref=e28]:
+          - slider "SPEED" [ref=e32] [cursor=pointer]: "50"
+          - generic [ref=e33]: SPEED
+          - generic [ref=e34]: "50.00"
+        - generic [ref=e35]:
+          - slider "HUE" [ref=e39] [cursor=pointer]: "0"
+          - generic [ref=e40]: HUE
+          - generic [ref=e41]: "0.00"
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - button "GEOMETRY ▼" [expanded] [ref=e44]:
+          - generic [ref=e47]: GEOMETRY
+          - generic [ref=e48]: ▼
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - generic [ref=e53]: SLICES
+              - generic [ref=e54]: "6.00"
+            - slider [ref=e55] [cursor=pointer]: "6"
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - generic [ref=e58]: ROTATION
+              - generic [ref=e59]: "0.00"
+            - slider [ref=e60] [cursor=pointer]: "0"
+          - generic [ref=e61]:
+            - generic [ref=e62]:
+              - generic [ref=e63]: WARP AMOUNT
+              - generic [ref=e64]: "0.00"
+            - slider [ref=e65] [cursor=pointer]: "0"
+          - generic [ref=e66]:
+            - paragraph [ref=e67]: WARP MODE
+            - generic [ref=e68]:
+              - button "OFF" [pressed] [ref=e69]
+              - button "POLAR" [ref=e70]
+              - button "LOG" [ref=e71]
+          - generic [ref=e72]:
+            - generic [ref=e73]:
+              - generic [ref=e74]: POSITION X
+              - generic [ref=e75]: "0.00"
+            - slider [ref=e76] [cursor=pointer]: "0"
+          - generic [ref=e77]:
+            - generic [ref=e78]:
+              - generic [ref=e79]: POSITION Y
+              - generic [ref=e80]: "0.00"
+            - slider [ref=e81] [cursor=pointer]: "0"
+          - generic [ref=e82]:
+            - generic [ref=e83]: TILING
+            - switch [ref=e84]
+      - button "COLOR ▼" [ref=e87]:
+        - generic [ref=e90]: COLOR
+        - generic [ref=e91]: ▼
+      - button "EFFECTS ▼" [ref=e93]:
+        - generic [ref=e96]: EFFECTS
+        - generic [ref=e97]: ▼
+      - button "MOTION ▼" [ref=e99]:
+        - generic [ref=e102]: MOTION
+        - generic [ref=e103]: ▼
+      - button "PRESETS ▼" [ref=e105]:
+        - generic [ref=e108]: PRESETS
+        - generic [ref=e109]: ▼
+    - generic [ref=e110]:
+      - button "FREEZE" [ref=e111]
+      - button "Start recording" [ref=e112]: REC
+  - generic:
+    - generic:
+      - generic: Start creating
+      - generic: Upload an image/video or pick a generator to begin.
+  - generic [ref=e114]:
+    - generic [ref=e115]:
+      - generic [ref=e116]:
+        - heading "Lumen Lab" [level=2] [ref=e117]:
+          - img [ref=e118]
+          - text: Lumen Lab
+        - paragraph [ref=e120]: Real-time Visual Synthesizer
+      - button [ref=e121]:
+        - img [ref=e122]
+    - generic [ref=e125]:
+      - generic [ref=e126]:
+        - heading "1. The Source" [level=3] [ref=e127]:
+          - img [ref=e128]
+          - text: 1. The Source
+        - generic [ref=e130]:
+          - generic [ref=e131]:
+            - heading "Image Input" [level=4] [ref=e132]:
+              - img [ref=e133]
+              - text: Image Input
+            - generic [ref=e137]:
+              - text: Upload any image to start. High-contrast or colorful images work best. Use
+              - strong [ref=e138]: Load Demo
+              - text: for a quick start.
+          - generic [ref=e139]:
+            - heading "Math Generators" [level=4] [ref=e140]:
+              - img [ref=e141]
+              - text: Math Generators
+            - generic [ref=e143]:
+              - text: "Create procedural patterns from scratch:"
+              - list [ref=e144]:
+                - listitem [ref=e145]:
+                  - strong [ref=e146]: "Fibonacci:"
+                  - text: Spiral phyllotaxis patterns. Control density/zoom.
+                - listitem [ref=e147]:
+                  - strong [ref=e148]: "Voronoi:"
+                  - text: Cellular organic noise. Control cell count/size.
+                - listitem [ref=e149]:
+                  - strong [ref=e150]: "Grid:"
+                  - text: Geometric lines. Control spacing/thickness.
+      - generic [ref=e151]:
+        - heading "2. Projection & Export" [level=3] [ref=e152]:
+          - img [ref=e153]
+          - text: 2. Projection & Export
+        - generic [ref=e155]:
+          - strong [ref=e156]: "Pro Tip: Projector Mode"
+          - paragraph [ref=e157]:
+            - text: Press
+            - strong [ref=e158]: F11
+            - text: to go Fullscreen. Lumen Lab is designed for live visuals—connect a projector, set your Canvas to
+            - strong [ref=e159]: 16:9
+            - text: ", and perform live!"
+        - list [ref=e160]:
+          - listitem [ref=e161]:
+            - strong [ref=e162]: "Virtual Canvas:"
+            - text: Set aspect ratio to 16:9 for standard projectors.
+          - listitem [ref=e163]:
+            - strong [ref=e164]: "4K Export:"
+            - text: Downloads high-res PNG for printing.
+      - generic [ref=e165]:
+        - heading "3. Space & Shape" [level=3] [ref=e166]:
+          - img [ref=e167]
+          - text: 3. Space & Shape
+        - generic [ref=e170]:
+          - generic [ref=e171]:
+            - strong [ref=e172]: Canvas & Portal Mode
+            - paragraph [ref=e173]:
+              - text: Set your aspect ratio (16:9, 1:1, etc.). Enable
+              - strong [ref=e174]: Portal Mode (Circle)
+              - text: to instantly mask your output into a perfect circle—great for logos or focused visuals.
+          - generic [ref=e175]:
+            - strong [ref=e176]: Geometry
+            - paragraph [ref=e177]:
+              - strong [ref=e178]: Scale
+              - text: and
+              - strong [ref=e179]: Rotate
+              - text: the canvas. Use
+              - strong [ref=e180]: Kaleidoscope
+              - text: (Symmetry) to mirror pixels into mandalas, or
+              - strong [ref=e181]: Tiling
+              - text: (Grid, Spin, Mirror) for infinite repeating patterns.
+      - generic [ref=e182]:
+        - heading "3. The Effects Rack" [level=3] [ref=e183]:
+          - img [ref=e184]
+          - text: 3. The Effects Rack
+        - generic [ref=e188]:
+          - generic [ref=e189]:
+            - heading "Distortion & Liquefy" [level=4] [ref=e190]:
+              - img [ref=e191]
+              - text: Distortion & Liquefy
+            - generic [ref=e193]:
+              - text: Bend space with
+              - strong [ref=e194]: Tunnel
+              - text: (Polar) or
+              - strong [ref=e195]: Vortex
+              - text: (Log-Polar). Use
+              - strong [ref=e196]: Liquefy
+              - text: sliders to add fluid-like waviness (Amp/Freq).
+          - generic [ref=e197]:
+            - heading "Alchemy" [level=4] [ref=e198]:
+              - img [ref=e199]
+              - text: Alchemy
+            - generic [ref=e201]:
+              - text: "Post-processing color effects:"
+              - list [ref=e202]:
+                - listitem [ref=e203]:
+                  - strong [ref=e204]: "Invert/Neon:"
+                  - text: Create dark mode or glowing edges.
+                - listitem [ref=e205]:
+                  - strong [ref=e206]: "Solarize:"
+                  - text: Trippy luminance inversion.
+                - listitem [ref=e207]:
+                  - strong [ref=e208]: "RGB Shift:"
+                  - text: Chromatic aberration.
+                - listitem [ref=e209]:
+                  - strong [ref=e210]: "Posterize:"
+                  - text: Reduce color bands for a retro look.
+      - generic [ref=e211]:
+        - heading "4. MIDI Control" [level=3] [ref=e212]:
+          - img [ref=e213]
+          - text: 4. MIDI Control
+        - generic [ref=e215]:
+          - paragraph [ref=e216]: Connect any MIDI controller and map knobs, faders, or buttons to almost any parameter in Lumen Lab.
+          - generic [ref=e217]:
+            - generic [ref=e218]:
+              - strong [ref=e219]: Learn Mode
+              - paragraph [ref=e220]:
+                - text: Open
+                - strong [ref=e221]: Settings
+                - text: →
+                - strong [ref=e222]: MIDI Control
+                - text: and toggle
+                - strong [ref=e223]: Learn Mode
+                - text: . Click any slider, then move a knob on your controller to map it instantly.
+            - generic [ref=e224]:
+              - strong [ref=e225]: Live Performance
+              - paragraph [ref=e226]: Mappings are saved automatically. Use MIDI to control effects intensity, generator speed, or switch presets without touching the mouse.
+        - generic [ref=e227]:
+          - generic [ref=e228]:
+            - generic [ref=e229]:
+              - img [ref=e230]
+              - text: Gamepad
+            - paragraph [ref=e232]:
+              - strong [ref=e233]: "L-Stick:"
+              - text: Pan •
+              - strong [ref=e234]: "R-Stick:"
+              - text: Zoom
+              - strong [ref=e235]: "Triggers:"
+              - text: Distort •
+              - strong [ref=e236]: "Buttons:"
+              - text: A/B/X/Y
+          - generic [ref=e237]:
+            - generic [ref=e238]:
+              - img [ref=e239]
+              - text: Keyboard
+            - paragraph [ref=e241]:
+              - strong [ref=e242]: "TAB:"
+              - text: Hide UI •
+              - strong [ref=e243]: "F:"
+              - text: Fullscreen
+              - strong [ref=e244]: "S:"
+              - text: Snapshot •
+              - strong [ref=e245]: "R:"
+              - text: Record
+      - generic [ref=e246]:
+        - heading "5. Flux & Visualizer" [level=3] [ref=e247]
+        - generic [ref=e248]:
+          - paragraph [ref=e249]:
+            - strong [ref=e250]: Flux
+            - text: is the heartbeat of Lumen Lab. Toggle it ON to enable auto-animation for Math Generators, Liquefy ripples, and Phase shifts.
+          - paragraph [ref=e251]:
+            - text: Use the
+            - strong [ref=e252]: Visualizer
+            - text: to take
+            - strong [ref=e253]: Snapshots
+            - text: of your settings. The app will morph between them in a loop based on your timing settings (Duration, Hold, Mode).
+    - button "Got it, let's create!" [ref=e255]

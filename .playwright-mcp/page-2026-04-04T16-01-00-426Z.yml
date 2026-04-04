@@ -1,0 +1,103 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - button "Undo (Ctrl+Z)" [disabled] [ref=e8]:
+        - img [ref=e9]
+      - button "Reset Parameters (Soft Reset)" [ref=e12]:
+        - img [ref=e13]
+    - generic [ref=e16]:
+      - button "RAIL" [ref=e17]
+      - button "FLOAT" [ref=e18]
+    - button "Settings" [ref=e19]:
+      - img [ref=e20]
+  - generic [ref=e23]: State reset after update
+  - generic [ref=e24]:
+    - button [ref=e25]:
+      - img [ref=e26]
+    - button [ref=e29]:
+      - img [ref=e30]
+    - button [active] [ref=e35]:
+      - img [ref=e36]
+    - button [ref=e38]:
+      - img [ref=e39]
+  - generic [ref=e243]:
+    - generic [ref=e244]:
+      - generic [ref=e245]:
+        - img [ref=e246]
+        - text: Color Grading
+      - generic [ref=e248]:
+        - generic [ref=e249]:
+          - generic [ref=e250]: Posterize
+          - generic [ref=e251]: "32"
+        - slider [ref=e252] [cursor=pointer]: "32"
+      - generic [ref=e253]:
+        - generic [ref=e254]: RGB Balance
+        - generic [ref=e255]:
+          - generic [ref=e256]:
+            - generic [ref=e257]:
+              - generic [ref=e258]: R
+              - generic [ref=e259]: "1.00"
+            - slider [ref=e260] [cursor=pointer]: "1"
+          - generic [ref=e261]:
+            - generic [ref=e262]:
+              - generic [ref=e263]: G
+              - generic [ref=e264]: "1.00"
+            - slider [ref=e265] [cursor=pointer]: "1"
+          - generic [ref=e266]:
+            - generic [ref=e267]:
+              - generic [ref=e268]: B
+              - generic [ref=e269]: "1.00"
+            - slider [ref=e270] [cursor=pointer]: "1"
+      - generic [ref=e271]:
+        - generic [ref=e272]: HSL
+        - generic [ref=e273]:
+          - generic [ref=e274]:
+            - generic [ref=e275]: Hue Rotate
+            - generic [ref=e276]: "0.00"
+          - slider [ref=e277] [cursor=pointer]: "0"
+        - generic [ref=e278]:
+          - generic [ref=e279]:
+            - generic [ref=e280]: Saturation
+            - generic [ref=e281]: "1.00"
+          - slider [ref=e282] [cursor=pointer]: "1"
+        - generic [ref=e283]:
+          - generic [ref=e284]:
+            - generic [ref=e285]: Brightness
+            - generic [ref=e286]: "1.00"
+          - slider [ref=e287] [cursor=pointer]: "1"
+    - generic [ref=e288]:
+      - generic [ref=e289]:
+        - generic [ref=e290]:
+          - img [ref=e291]
+          - text: Audio Reactivity
+        - button [ref=e294]
+      - generic [ref=e296]:
+        - generic [ref=e297]: Source
+        - combobox [ref=e298]:
+          - option "Microphone" [selected]
+          - option "Audio File"
+    - generic [ref=e299]:
+      - generic [ref=e300]:
+        - img [ref=e301]
+        - text: Post Processing
+      - generic [ref=e303]:
+        - generic [ref=e304]:
+          - generic [ref=e305]: Bloom
+          - generic [ref=e306]: "0.00"
+        - slider [ref=e307] [cursor=pointer]: "0"
+      - generic [ref=e308]:
+        - generic [ref=e309]:
+          - generic [ref=e310]: Chromatic Aberration
+          - generic [ref=e311]: "0.00"
+        - slider [ref=e312] [cursor=pointer]: "0"
+      - generic [ref=e313]:
+        - generic [ref=e314]:
+          - generic [ref=e315]: Noise
+          - generic [ref=e316]: "0.00"
+        - slider [ref=e317] [cursor=pointer]: "0"
+    - generic [ref=e319]:
+      - generic [ref=e320]:
+        - img [ref=e321]
+        - text: Advanced (Masking / Edge / Extra FX)
+      - button "Show" [ref=e322]
+  - heading "Lumen Lab v0.6" [level=1] [ref=e74]

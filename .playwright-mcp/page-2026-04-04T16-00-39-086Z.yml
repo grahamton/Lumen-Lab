@@ -1,0 +1,54 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Undo (Ctrl+Z)" [disabled] [ref=e8]:
+          - img [ref=e9]
+        - button "Reset Parameters (Soft Reset)" [ref=e12]:
+          - img [ref=e13]
+      - generic [ref=e16]:
+        - button "RAIL" [ref=e17]
+        - button "FLOAT" [ref=e18]
+      - button "Settings" [ref=e19]:
+        - img [ref=e20]
+    - generic [ref=e23]: State reset after update
+    - generic [ref=e24]:
+      - button [ref=e25]:
+        - img [ref=e26]
+      - button [ref=e29]:
+        - img [ref=e30]
+      - button [ref=e35]:
+        - img [ref=e36]
+      - button [ref=e38]:
+        - img [ref=e39]
+    - generic [ref=e43]:
+      - generic [ref=e44]:
+        - generic [ref=e45]: Media Source
+        - generic [ref=e46]:
+          - button "Upload" [ref=e47]:
+            - img [ref=e48]
+            - text: Upload
+          - button "Randomize" [ref=e51]:
+            - img [ref=e52]
+            - text: Randomize
+      - generic [ref=e54]:
+        - generic [ref=e55]:
+          - generic [ref=e56]: Generator Type
+          - generic [ref=e57]:
+            - generic [ref=e58]: Animate
+            - button [ref=e60]
+        - generic [ref=e62]:
+          - button "fibonacci" [ref=e63]
+          - button "voronoi" [ref=e64]
+          - button "grid" [ref=e65]
+          - button "liquid" [ref=e66]
+          - button "plasma" [ref=e67]
+          - button "fractal" [ref=e68]
+      - generic [ref=e70]:
+        - img [ref=e71]
+        - text: Generator Params
+    - heading "Lumen Lab v0.6" [level=1] [ref=e74]
+  - generic:
+    - generic:
+      - generic: Start creating
+      - generic: Upload an image/video or pick a generator to begin.

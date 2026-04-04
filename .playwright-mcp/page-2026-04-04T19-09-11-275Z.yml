@@ -1,0 +1,83 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]: LUMEN LAB
+    - generic [ref=e8]:
+      - button "Undo" [disabled] [ref=e9]: ↩
+      - button "Redo" [disabled] [ref=e10]: ↪
+  - generic [ref=e11]:
+    - paragraph [ref=e12]: GENERATOR
+    - generic [ref=e13]:
+      - button "FIBONACCI" [active] [pressed] [ref=e14]
+      - button "VORONOI" [ref=e15]
+      - button "GRID" [ref=e16]
+      - button "LIQUID" [ref=e17]
+      - button "PLASMA" [ref=e18]
+      - button "IMAGE" [ref=e19]
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - slider "SCALE" [ref=e25] [cursor=pointer]: "1"
+        - generic [ref=e26]: SCALE
+        - generic [ref=e27]: "1.00"
+      - generic [ref=e28]:
+        - slider "SPEED" [ref=e32] [cursor=pointer]: "50"
+        - generic [ref=e33]: SPEED
+        - generic [ref=e34]: "50.00"
+      - generic [ref=e35]:
+        - slider "HUE" [ref=e39] [cursor=pointer]: "0"
+        - generic [ref=e40]: HUE
+        - generic [ref=e41]: "0.00"
+  - generic [ref=e42]:
+    - generic [ref=e43]:
+      - button "GEOMETRY ▼" [expanded] [ref=e44]:
+        - generic [ref=e47]: GEOMETRY
+        - generic [ref=e48]: ▼
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e52]:
+            - generic [ref=e53]: SLICES
+            - generic [ref=e54]: "6.00"
+          - slider [ref=e55] [cursor=pointer]: "6"
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]: ROTATION
+            - generic [ref=e59]: "0.00"
+          - slider [ref=e60] [cursor=pointer]: "0"
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - generic [ref=e63]: WARP AMOUNT
+            - generic [ref=e64]: "0.00"
+          - slider [ref=e65] [cursor=pointer]: "0"
+        - generic [ref=e66]:
+          - paragraph [ref=e67]: WARP MODE
+          - generic [ref=e68]:
+            - button "OFF" [pressed] [ref=e69]
+            - button "POLAR" [ref=e70]
+            - button "LOG" [ref=e71]
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e74]: POSITION X
+            - generic [ref=e75]: "0.00"
+          - slider [ref=e76] [cursor=pointer]: "0"
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - generic [ref=e79]: POSITION Y
+            - generic [ref=e80]: "0.00"
+          - slider [ref=e81] [cursor=pointer]: "0"
+        - generic [ref=e82]:
+          - generic [ref=e83]: TILING
+          - switch [ref=e84]
+    - button "COLOR ▼" [ref=e87]:
+      - generic [ref=e90]: COLOR
+      - generic [ref=e91]: ▼
+    - button "EFFECTS ▼" [ref=e93]:
+      - generic [ref=e96]: EFFECTS
+      - generic [ref=e97]: ▼
+    - button "MOTION ▼" [ref=e99]:
+      - generic [ref=e102]: MOTION
+      - generic [ref=e103]: ▼
+    - button "PRESETS ▼" [ref=e105]:
+      - generic [ref=e108]: PRESETS
+      - generic [ref=e109]: ▼
+  - generic [ref=e110]:
+    - button "FREEZE" [ref=e111]
+    - button "Start recording" [ref=e112]: REC
