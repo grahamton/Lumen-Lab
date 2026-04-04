@@ -1,8 +1,18 @@
 import { useStore } from '../../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { presets } from '../../presets'
 
 export function SectionPresets({ onInteract }) {
-  const { userPresets, loadSnapshot, addSnapshot, setUi, resetParams } = useStore()
+  const { userPresets, loadSnapshot, addSnapshot, setUi, resetParams } = useStore(
+    (state) => ({
+      userPresets:  state.userPresets,
+      loadSnapshot: state.loadSnapshot,
+      addSnapshot:  state.addSnapshot,
+      setUi:        state.setUi,
+      resetParams:  state.resetParams,
+    }),
+    shallow
+  )
 
   const allPresets = [
     ...presets.map((p) => ({ ...p, isBuiltIn: true })),

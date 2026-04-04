@@ -1,4 +1,5 @@
 import { useStore } from '../../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
 function Toggle({ label, isOn, onToggle }) {
@@ -18,7 +19,17 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionEffects({ onInteract }) {
-  const { effects, setEffect, audio, setAudio, canvas, setCanvas } = useStore()
+  const { effects, setEffect, audio, setAudio, canvas, setCanvas } = useStore(
+    (state) => ({
+      effects:   state.effects,
+      setEffect: state.setEffect,
+      audio:     state.audio,
+      setAudio:  state.setAudio,
+      canvas:    state.canvas,
+      setCanvas: state.setCanvas,
+    }),
+    shallow
+  )
 
   function wrap(fn) {
     return (...args) => { onInteract?.(); fn(...args) }

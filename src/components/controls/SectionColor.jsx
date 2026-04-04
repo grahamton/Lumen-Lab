@@ -1,4 +1,5 @@
 import { useStore } from '../../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
 function Toggle({ label, isOn, onToggle }) {
@@ -18,7 +19,15 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionColor({ onInteract }) {
-  const { color, setColor, effects, setEffect } = useStore()
+  const { color, setColor, effects, setEffect } = useStore(
+    (state) => ({
+      color:     state.color,
+      setColor:  state.setColor,
+      effects:   state.effects,
+      setEffect: state.setEffect,
+    }),
+    shallow
+  )
 
   function wrap(fn) {
     return (...args) => { onInteract?.(); fn(...args) }

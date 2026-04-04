@@ -1,4 +1,5 @@
 import { useStore } from '../../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
 const WARP_MODES = [
@@ -24,7 +25,21 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionGeometry({ onInteract }) {
-  const { symmetry, setSymmetry, transforms, setTransform, warp, setWarp, displacement, setDisplacement, tiling, setTiling } = useStore()
+  const { symmetry, setSymmetry, transforms, setTransform, warp, setWarp, displacement, setDisplacement, tiling, setTiling } = useStore(
+    (state) => ({
+      symmetry:        state.symmetry,
+      setSymmetry:     state.setSymmetry,
+      transforms:      state.transforms,
+      setTransform:    state.setTransform,
+      warp:            state.warp,
+      setWarp:         state.setWarp,
+      displacement:    state.displacement,
+      setDisplacement: state.setDisplacement,
+      tiling:          state.tiling,
+      setTiling:       state.setTiling,
+    }),
+    shallow
+  )
 
   function wrap(fn) {
     return (...args) => { onInteract?.(); fn(...args) }

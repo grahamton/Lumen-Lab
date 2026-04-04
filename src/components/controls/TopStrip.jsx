@@ -1,5 +1,6 @@
-import { useRef } from 'react'
+import React, { useRef, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
 
 // fractal generator exists in engine but has no UI params yet
@@ -9,21 +10,22 @@ const GEN_LABELS = {
   liquid: 'LIQUID', plasma: 'PLASMA',
 }
 
-function KnobSlider({ label, section, param, value, onChange }) {
+const KnobSlider = React.memo(function KnobSlider({ label, section, param, value, onChange }) {
   const cfg = CONTROLS[section]?.[param]
   if (!cfg) return null
   const pct = Math.max(0, Math.min(1, (value - cfg.min) / (cfg.max - cfg.min)))
   const fillDeg = pct * 270
+  const gradientStyle = useMemo(() => ({
+    background: `conic-gradient(#22d3ee 0deg ${fillDeg}deg, #262626 ${fillDeg}deg 270deg)`,
+    transform: 'rotate(-135deg)',
+  }), [fillDeg])
 
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="relative w-11 h-11">
         <div
           className="w-full h-full rounded-full border-2 border-neutral-700"
-          style={{
-            background: `conic-gradient(#22d3ee 0deg ${fillDeg}deg, #262626 ${fillDeg}deg 270deg)`,
-            transform: 'rotate(-135deg)',
-          }}
+          style={gradientStyle}
         />
         <div className="absolute inset-1.5 rounded-full bg-neutral-900" />
         <input
@@ -43,13 +45,30 @@ function KnobSlider({ label, section, param, value, onChange }) {
       </span>
     </div>
   )
-}
+})
 
 export function TopStrip() {
   const fileRef = useRef(null)
-  const { generator, setGenerator, transforms, setTransform, color, setColor, image, setImage, resetForUpload } = useStore()
+  const {
+    generatorType, generatorParam3, transformsScale, colorHue,
+    image, setGenerator, setTransform, setColor, setImage, resetForUpload
+  } = useStore(
+    (state) => ({
+      generatorType:   state.generator.type,
+      generatorParam3: state.generator.param3,
+      transformsScale: state.transforms.scale,
+      colorHue:        state.color.hue,
+      image:           state.image,
+      setGenerator:    state.setGenerator,
+      setTransform:    state.setTransform,
+      setColor:        state.setColor,
+      setImage:        state.setImage,
+      resetForUpload:  state.resetForUpload,
+    }),
+    shallow
+  )
 
-  const imageActive = generator.type === 'none' && image != null
+  const imageActive = generatorType === 'none' && image != null
   const rawName = image?.src?.split('/').pop() ?? ''
   const imageLabel = rawName.length > 8 ? rawName.slice(0, 8) + '…' : rawName || 'IMAGE'
 
@@ -80,9 +99,9 @@ export function TopStrip() {
           <button
             key={g}
             onClick={() => setGenerator('type', g)}
-            aria-pressed={generator.type === g}
+            aria-pressed={generatorType === g}
             className={`py-1.5 rounded text-[8px] tracking-wider border transition-colors ${
-              generator.type === g
+              generatorType === g
                 ? 'bg-cyan-950 border-cyan-400 text-cyan-400'
                 : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
             }`}
@@ -107,21 +126,21 @@ export function TopStrip() {
           label="SCALE"
           section="transforms"
           param="scale"
-          value={transforms.scale}
+          value={transformsScale}
           onChange={(v) => setTransform('scale', v)}
         />
         <KnobSlider
           label="SPEED"
           section="generator"
           param="param3"
-          value={generator.param3}
+          value={generatorParam3}
           onChange={(v) => setGenerator('param3', v)}
         />
         <KnobSlider
           label="HUE"
           section="color"
           param="hue"
-          value={color.hue}
+          value={colorHue}
           onChange={(v) => setColor('hue', v)}
         />
       </div>

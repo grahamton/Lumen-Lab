@@ -1,16 +1,25 @@
+import React from 'react'
 import { useStore } from '../../store/useStore'
+import { shallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
 
-export function ControlGroup({ section, param, value, onChange }) {
-  const { ui, setUi } = useStore()
+export const ControlGroup = React.memo(function ControlGroup({ section, param, value, onChange }) {
+  const { midiLearnActive, midiLearnId, setUi } = useStore(
+    (state) => ({
+      midiLearnActive: state.ui.midiLearnActive,
+      midiLearnId: state.ui.midiLearnId,
+      setUi: state.setUi,
+    }),
+    shallow
+  )
   const cfg = CONTROLS[section]?.[param]
   if (!cfg) return null
 
   const learnId = `${section}.${param}`
-  const isLearning = ui.midiLearnActive && ui.midiLearnId === learnId
+  const isLearning = midiLearnActive && midiLearnId === learnId
 
   function handleContainerClick() {
-    if (ui.midiLearnActive) setUi('midiLearnId', learnId)
+    if (midiLearnActive) setUi('midiLearnId', learnId)
   }
 
   return (
@@ -34,4 +43,4 @@ export function ControlGroup({ section, param, value, onChange }) {
       />
     </div>
   )
-}
+})
