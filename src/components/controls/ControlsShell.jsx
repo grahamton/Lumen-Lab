@@ -17,7 +17,7 @@ const SECTIONS = [
 ]
 
 export function ControlsShell({ className = '' }) {
-  const { undo, redo, undoStack, redoStack, ui, setUi, recording, setRecording } = useStore()
+  const { undo, redo, undoStack, redoStack, ui, setUi, recording, setRecording, toggleControls } = useStore()
 
   if (!ui.controlsOpen) return null
 
@@ -68,6 +68,14 @@ export function ControlsShell({ className = '' }) {
             className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-cyan-400 hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
           >
             ↪
+          </button>
+          <button
+            onClick={() => toggleControls(false)}
+            title="Hide panel (Tab)"
+            aria-label="Hide panel"
+            className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-cyan-400 hover:bg-neutral-800 transition-colors text-sm"
+          >
+            ✕
           </button>
         </div>
       </div>

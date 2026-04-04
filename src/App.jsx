@@ -102,9 +102,10 @@ function App() {
       {!useStore((state) => state.ui.controlsOpen) && (
         <button
           onClick={() => useStore.getState().toggleControls(true)}
-          className="fixed bottom-4 right-4 z-40 p-2 bg-neutral-800/50 hover:bg-neutral-800 text-white rounded-full border border-white/10 backdrop-blur transition-all"
+          title="Show panel (Tab)"
+          className="fixed top-4 left-4 z-40 px-3 py-2 bg-neutral-900/90 hover:bg-neutral-800 text-cyan-400 font-bold tracking-widest text-xs rounded border border-neutral-700 hover:border-cyan-400 backdrop-blur transition-all"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v18h-6M10 17l5-5-5-5M13 12H3" /></svg>
+          ☰ LUMEN LAB
         </button>
       )}
 

@@ -2,7 +2,7 @@ import { useStore } from '../../store/useStore'
 import { presets } from '../../presets'
 
 export function SectionPresets({ onInteract }) {
-  const { userPresets, loadSnapshot, addSnapshot, setUi } = useStore()
+  const { userPresets, loadSnapshot, addSnapshot, setUi, resetParams } = useStore()
 
   const allPresets = [
     ...presets.map((p) => ({ ...p, isBuiltIn: true })),
@@ -37,7 +37,11 @@ export function SectionPresets({ onInteract }) {
         >
           EXPORT
         </button>
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={() => { onInteract?.(); if (window.confirm('Reset all parameters to defaults?')) resetParams() }}
+          className="flex-1 bg-neutral-800 border border-red-900/50 hover:border-red-500 hover:text-red-400 text-neutral-500 rounded py-1.5 text-[8px] tracking-wider transition-colors"
+        >
+          RESET
+        </button>
       </div>
-    </div>
-  )
-}
