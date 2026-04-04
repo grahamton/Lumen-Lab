@@ -19,8 +19,6 @@ const SECTIONS = [
 export function ControlsShell({ className = '' }) {
   const { undo, redo, undoStack, redoStack, ui, setUi, recording, setRecording, toggleControls } = useStore()
 
-  if (!ui.controlsOpen) return null
-
   const initialSection = ui.lastActiveSection ?? 'geometry'
   const [openSections, setOpenSections] = useState(() => new Set([initialSection]))
   const [activeSection, setActiveSection] = useState(initialSection)
@@ -46,7 +44,7 @@ export function ControlsShell({ className = '' }) {
   }
 
   return (
-    <div className={`absolute left-0 top-0 h-full z-30 w-64 flex flex-col bg-neutral-900 border-r border-neutral-700 ${className}`}>
+    <div className={`absolute left-0 top-0 h-full z-30 w-64 flex flex-col bg-neutral-900 border-r border-neutral-700 transition-transform duration-200 ${ui.controlsOpen ? 'translate-x-0' : '-translate-x-full'} ${className}`}>
       {/* Topbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800 shrink-0">
         <span className="text-cyan-400 font-bold tracking-widest text-sm">LUMEN LAB</span>

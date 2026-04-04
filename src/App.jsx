@@ -87,7 +87,9 @@ function App() {
           <LazyCanvas />
         </Suspense>
       </ErrorBoundary>
-      <ControlsShell />
+      <ErrorBoundary fallback={<div className="absolute left-0 top-0 h-full w-64 flex items-center justify-center text-red-500 font-mono text-xs bg-neutral-900">Panel Error</div>}>
+        <ControlsShell />
+      </ErrorBoundary>
       {/* Blank state helper */}
       {!useStore((state) => state.image || (state.generator?.type && state.generator.type !== 'none')) && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
