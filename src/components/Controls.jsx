@@ -49,7 +49,11 @@ const Toggle = ({ label, value, onChange }) => (
       onClick={() => onChange(!value)}
       className={`w-8 h-4 rounded-full transition-all relative ${value ? 'bg-cyan-900' : 'bg-neutral-800'}`}
     >
-      <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${value ? 'left-4.5 bg-cyan-400' : 'left-0.5 bg-neutral-500'}`} />
+      <div
+        className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full transform transition-all ${
+          value ? 'translate-x-4 bg-cyan-400' : 'translate-x-0 bg-neutral-500'
+        }`}
+      />
     </button>
   </div>
 )
@@ -77,20 +81,47 @@ export function Controls() {
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
-    if (file) {
-      const url = URL.createObjectURL(file)
+    if (!file) return
+
+    const url = URL.createObjectURL(file)
+    const isVideo = file.type?.startsWith('video')
+
+    if (isVideo) {
+      const video = document.createElement('video')
+      video.src = url
+      video.loop = true
+      video.muted = true
+      video.playsInline = true
+      video.crossOrigin = 'anonymous'
+
+      video.onloadeddata = async () => {
+        try {
+          await video.play()
+        } catch (err) {
+          console.warn('Autoplay blocked for video upload', err)
+        }
+        store.setImage(video)
+        store.resetForUpload()
+      }
+
+      video.onerror = (err) => {
+        console.error('Failed to load video', err)
+        alert('Failed to load video. Please try another file.')
+      }
+    } else {
       const img = new Image()
       img.onload = () => {
         store.setImage(img)
         store.resetForUpload() // Reset modifers so user sees the raw image
       }
       img.onerror = (err) => {
-        console.error("Failed to load image", err)
-        alert("Failed to load image. Please try another file.")
+        console.error('Failed to load image', err)
+        alert('Failed to load image. Please try another file.')
       }
       img.src = url
-      e.target.value = '' // Reset input to allow re-uploading the same file
     }
+
+    e.target.value = '' // Reset input to allow re-uploading the same file
   }
 
   // Content for each Tab

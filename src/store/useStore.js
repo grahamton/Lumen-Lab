@@ -483,8 +483,9 @@ export const useStore = create(
           generator: { ...DEFAULTS.generator, type: state.generator.type },
           color: { ...DEFAULTS.color },
           effects: { ...DEFAULTS.effects },
-          flux: { ...DEFAULTS.flux },
-          lfo: { ...DEFAULTS.lfo },
+          // Keep global modulation/audio state when doing a soft reset
+          flux: { ...state.flux },
+          lfo: { ...state.lfo },
           audio: { ...state.audio },
           animation: { ...state.animation, isPlaying: false } // Stop playing but keep timeline
         }))
