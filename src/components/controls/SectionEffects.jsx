@@ -1,5 +1,5 @@
 import { useStore } from '../../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
 function Toggle({ label, isOn, onToggle }) {
