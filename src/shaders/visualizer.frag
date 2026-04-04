@@ -7,10 +7,6 @@ uniform float uGenTime; // New: Generator specific time
 uniform float uAspect; // Canvas Aspect Ratio
 uniform float uImageAspect; // Image Aspect Ratio
 uniform float uShape; // 0=Rect, 1=Circle
-uniform float uMaskThreshold; // 0-100
-uniform float uMaskRadius; // 0-100 (percent of frame)
-uniform float uMaskInvert; // bool as float
-uniform float uMaskFeather; // 0-1
 
 // Transforms
 uniform vec4 uTransforms; // x, y, scale, rotation
@@ -32,7 +28,6 @@ uniform float uTilingOverlap; // 0-1 blend to center UV
 
 // Color & Effects
 uniform float uPosterize;
-uniform vec3 uColorRGB; // r, g, b multiplier
 uniform vec3 uColorHSL; // h (offset), s (mult), l (mult)
 uniform vec4 uEffects; // edge, invert, solarize, shift
 
@@ -337,32 +332,7 @@ void main() {
     vec4 texColor = getContent(coord);
     vec3 color = texColor.rgb;
 
-    // Masking based on luma and optional radial mask
-    float mask = 1.0;
-    float lumaThresh = clamp(uMaskThreshold * 0.01, 0.0, 1.0); // normalize 0-100
-    float luma = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
-    if (lumaThresh > 0.0) {
-        mask *= smoothstep(lumaThresh, lumaThresh + 0.05, luma); // small softness
-    }
-    if (uMaskRadius > 0.0) {
-        vec2 cUV = coord - vec2(0.5);
-        cUV.x *= uAspect;
-        float r = length(cUV);
-        float radius = uMaskRadius * 0.01; // percent of frame
-        float feather = clamp(uMaskFeather, 0.0, 1.0) * 0.25; // up to 25% softness
-        float ring = 1.0 - smoothstep(radius - feather, radius + feather, r);
-        mask *= ring;
-    }
-    if (uMaskInvert > 0.5) {
-        mask = 1.0 - mask;
-    }
-    texColor.a *= mask;
-    color *= mask;
-
     // --- COLOR GRADING (RGB & HSL) ---
-
-    // 1. RGB Balance
-    color *= uColorRGB;
 
     // 2. HSL Grading
     if (uColorHSL.x != 0.0 || uColorHSL.y != 1.0 || uColorHSL.z != 1.0) {
