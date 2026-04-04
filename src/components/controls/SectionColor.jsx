@@ -1,5 +1,5 @@
 import { useStore } from '../../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
 function Toggle({ label, isOn, onToggle }) {
@@ -20,13 +20,12 @@ function Toggle({ label, isOn, onToggle }) {
 
 export function SectionColor({ onInteract }) {
   const { color, setColor, effectsInvert, setEffect } = useStore(
-    (state) => ({
+    useShallow((state) => ({
       color:         state.color,
       setColor:      state.setColor,
       effectsInvert: state.effects.invert,
       setEffect:     state.setEffect,
-    }),
-    shallow
+    }))
   )
 
   function wrap(fn) {

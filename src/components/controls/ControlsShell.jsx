@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { TopStrip } from './TopStrip'
 import { CollapsibleSection } from './CollapsibleSection'
 import { SectionGeometry } from './SectionGeometry'
@@ -23,7 +23,7 @@ export function ControlsShell({ className = '' }) {
     controlsOpen, lastActiveSection, globalPause,
     setUi, recordingIsActive, setRecording, toggleControls
   } = useStore(
-    (state) => ({
+    useShallow((state) => ({
       undo:              state.undo,
       redo:              state.redo,
       undoStackLen:      state.undoStack.length,
@@ -35,8 +35,7 @@ export function ControlsShell({ className = '' }) {
       recordingIsActive: state.recording.isActive,
       setRecording:      state.setRecording,
       toggleControls:    state.toggleControls,
-    }),
-    shallow
+    }))
   )
 
   const initialSection = lastActiveSection ?? 'geometry'

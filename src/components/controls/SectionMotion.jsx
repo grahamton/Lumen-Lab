@@ -1,5 +1,5 @@
 import { useStore } from '../../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
 function Toggle({ label, isOn, onToggle }) {
@@ -20,15 +20,14 @@ function Toggle({ label, isOn, onToggle }) {
 
 export function SectionMotion({ onInteract }) {
   const { globalPause, setUi, animation, setAnimation, flux, setFlux } = useStore(
-    (state) => ({
+    useShallow((state) => ({
       globalPause:  state.ui.globalPause,
       setUi:        state.setUi,
       animation:    state.animation,
       setAnimation: state.setAnimation,
       flux:         state.flux,
       setFlux:      state.setFlux,
-    }),
-    shallow
+    }))
   )
   const isPlaying = !globalPause
 

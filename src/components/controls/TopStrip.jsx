@@ -1,6 +1,6 @@
-import React, { useRef, useMemo } from 'react'
+import React, { useRef, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
 
 // fractal generator exists in engine but has no UI params yet
@@ -53,7 +53,7 @@ export function TopStrip() {
     generatorType, generatorParam3, transformsScale, colorHue,
     image, setGenerator, setTransform, setColor, setImage, resetForUpload
   } = useStore(
-    (state) => ({
+    useShallow((state) => ({
       generatorType:   state.generator.type,
       generatorParam3: state.generator.param3,
       transformsScale: state.transforms.scale,
@@ -64,13 +64,16 @@ export function TopStrip() {
       setColor:        state.setColor,
       setImage:        state.setImage,
       resetForUpload:  state.resetForUpload,
-    }),
-    shallow
+    }))
   )
 
   const imageActive = generatorType === 'none' && image != null
   const rawName = image?.src?.split('/').pop() ?? ''
   const imageLabel = rawName.length > 8 ? rawName.slice(0, 8) + '…' : rawName || 'IMAGE'
+
+  const handleScaleChange  = useCallback((v) => setTransform('scale', v),  [setTransform])
+  const handleParam3Change = useCallback((v) => setGenerator('param3', v), [setGenerator])
+  const handleHueChange    = useCallback((v) => setColor('hue', v),        [setColor])
 
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -127,21 +130,21 @@ export function TopStrip() {
           section="transforms"
           param="scale"
           value={transformsScale}
-          onChange={(v) => setTransform('scale', v)}
+          onChange={handleScaleChange}
         />
         <KnobSlider
           label="SPEED"
           section="generator"
           param="param3"
           value={generatorParam3}
-          onChange={(v) => setGenerator('param3', v)}
+          onChange={handleParam3Change}
         />
         <KnobSlider
           label="HUE"
           section="color"
           param="hue"
           value={colorHue}
-          onChange={(v) => setColor('hue', v)}
+          onChange={handleHueChange}
         />
       </div>
     </div>

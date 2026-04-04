@@ -1,16 +1,15 @@
 import React from 'react'
 import { useStore } from '../../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
 
 export const ControlGroup = React.memo(function ControlGroup({ section, param, value, onChange }) {
   const { midiLearnActive, midiLearnId, setUi } = useStore(
-    (state) => ({
+    useShallow((state) => ({
       midiLearnActive: state.ui.midiLearnActive,
       midiLearnId: state.ui.midiLearnId,
       setUi: state.setUi,
-    }),
-    shallow
+    }))
   )
   const cfg = CONTROLS[section]?.[param]
   if (!cfg) return null

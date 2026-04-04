@@ -19,16 +19,18 @@ function Toggle({ label, isOn, onToggle }) {
 }
 
 export function SectionEffects({ onInteract }) {
-  const { effects, setEffect, audio, setAudio, canvasShape, setCanvas } = useStore(
-    (state) => ({
-      effects:     state.effects,
-      setEffect:   state.setEffect,
-      audio:       state.audio,
-      setAudio:    state.setAudio,
-      canvasShape: state.canvas.shape,
-      setCanvas:   state.setCanvas,
-    }),
-    shallow
+  const { effectsBloom, effectsCA, effectsNoise, audioEnabled, audioSensitivity, setEffect, setAudio, canvasShape, setCanvas } = useStore(
+    useShallow((state) => ({
+      effectsBloom:       state.effects.bloom,
+      effectsCA:          state.effects.chromaticAberration,
+      effectsNoise:       state.effects.noise,
+      audioEnabled:       state.audio.enabled,
+      audioSensitivity:   state.audio.sensitivity,
+      setEffect:          state.setEffect,
+      setAudio:           state.setAudio,
+      canvasShape:        state.canvas.shape,
+      setCanvas:          state.setCanvas,
+    }))
   )
 
   function wrap(fn) {
@@ -39,21 +41,21 @@ export function SectionEffects({ onInteract }) {
 
   return (
     <div>
-      <ControlGroup section="effects" param="bloom"               value={effects.bloom}               onChange={wrap((v) => setEffect('bloom', v))} />
-      <ControlGroup section="effects" param="chromaticAberration" value={effects.chromaticAberration} onChange={wrap((v) => setEffect('chromaticAberration', v))} />
-      <ControlGroup section="effects" param="noise"               value={effects.noise}               onChange={wrap((v) => setEffect('noise', v))} />
+      <ControlGroup section="effects" param="bloom"               value={effectsBloom}  onChange={wrap((v) => setEffect('bloom', v))} />
+      <ControlGroup section="effects" param="chromaticAberration" value={effectsCA}     onChange={wrap((v) => setEffect('chromaticAberration', v))} />
+      <ControlGroup section="effects" param="noise"               value={effectsNoise}  onChange={wrap((v) => setEffect('noise', v))} />
 
       <Toggle
         label="AUDIO REACTIVE"
-        isOn={audio.enabled}
-        onToggle={wrap(() => setAudio('enabled', !audio.enabled))}
+        isOn={audioEnabled}
+        onToggle={wrap(() => setAudio('enabled', !audioEnabled))}
       />
 
-      {audio.enabled && (
+      {audioEnabled && (
         <ControlGroup
           section="audio"
           param="sensitivity"
-          value={audio.sensitivity}
+          value={audioSensitivity}
           onChange={wrap((v) => setAudio('sensitivity', v))}
         />
       )}

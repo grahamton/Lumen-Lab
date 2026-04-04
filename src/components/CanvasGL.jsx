@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { EffectComposer, Bloom, Noise, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import { useStore } from '../store/useStore'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/shallow'
 import { useVideoRecorder } from '../hooks/useVideoRecorder'
 import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
 import vertShader from '../shaders/visualizer.vert?raw'
@@ -326,13 +326,12 @@ function VisualizerScene() {
 
 function EffectsLayer() {
   const { perfCapFx, bloom, chromaticRaw, noiseRaw } = useStore(
-    (state) => ({
+    useShallow((state) => ({
       perfCapFx: state.ui?.perfCapFx,
       bloom: state.effects.bloom,
       chromaticRaw: state.effects.chromaticAberration,
       noiseRaw: state.effects.noise,
-    }),
-    shallow
+    }))
   )
 
   const chromaticAberration = perfCapFx ? Math.min(chromaticRaw, 0.5) : chromaticRaw
