@@ -119,4 +119,34 @@ describe('Zustand Store', () => {
     expect(state.transforms.scale).toBe(1) // Param should reset
     expect(state.audio.enabled).toBe(true) // Audio (Global) should PERSIST
   })
+
+  it('should not have lfo or masking state', () => {
+    const state = useStore.getState()
+    expect(state.lfo).toBeUndefined()
+    expect(state.masking).toBeUndefined()
+  })
+
+  it('should have lastActiveSection in ui', () => {
+    expect(useStore.getState().ui.lastActiveSection).toBe('geometry')
+  })
+
+  it('should undo and redo a transform change', () => {
+    const store = useStore.getState()
+    act(() => { store.setTransform('scale', 1) })
+    act(() => { store.pushUndo() })
+    act(() => { store.setTransform('scale', 2.5) })
+    act(() => { store.undo() })
+    expect(useStore.getState().transforms.scale).toBe(1)
+    act(() => { store.redo() })
+    expect(useStore.getState().transforms.scale).toBe(2.5)
+  })
+
+  it('should clear redoStack when pushUndo is called after undo', () => {
+    const store = useStore.getState()
+    act(() => { store.pushUndo() })
+    act(() => { store.setTransform('scale', 2.5) })
+    act(() => { store.undo() })
+    act(() => { store.pushUndo() })
+    expect(useStore.getState().redoStack.length).toBe(0)
+  })
 })
