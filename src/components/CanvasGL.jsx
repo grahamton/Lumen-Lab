@@ -142,7 +142,7 @@ function VisualizerScene() {
     } = useStore.getState() // Access fresh state without re-render
 
     // Time Logic: Always translate global time
-    if (!useStore.getState().ui.globalPause) {
+    if (!ui.globalPause) {
       timeRef.current += delta
       // Generator Time Logic: Only advance if animated
       if (generator.isAnimated !== false) { // Default to true if undefined
@@ -346,14 +346,20 @@ function EffectsLayer() {
 }
 
 export function CanvasGL() {
-  const { canvas } = useStore()
-  const lowResPreview = useStore((state) => state.ui.lowResPreview)
+  const { canvasWidth, canvasHeight, canvasAspect, lowResPreview } = useStore(
+    useShallow((state) => ({
+      canvasWidth:   state.canvas.width,
+      canvasHeight:  state.canvas.height,
+      canvasAspect:  state.canvas.aspect,
+      lowResPreview: state.ui.lowResPreview,
+    }))
+  )
 
   // Calculate viewport style (Letterboxing)
   const style = useMemo(() => {
-    if (canvas.aspect === 'free') return { width: '100%', height: '100%' }
+    if (canvasAspect === 'free') return { width: '100%', height: '100%' }
 
-    const targetAspect = canvas.width / canvas.height
+    const targetAspect = canvasWidth / canvasHeight
     const windowAspect = window.innerWidth / window.innerHeight
 
     if (windowAspect > targetAspect) {
@@ -361,7 +367,7 @@ export function CanvasGL() {
     } else {
       return { width: '100vw', height: `${100 * windowAspect / targetAspect}vh`, transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }
     }
-  }, [canvas.width, canvas.height, canvas.aspect])
+  }, [canvasWidth, canvasHeight, canvasAspect])
 
   return (
     <div className="w-full h-full bg-neutral-900 flex items-center justify-center overflow-hidden relative">
