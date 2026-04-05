@@ -30,6 +30,7 @@ uniform float uTilingOverlap; // 0-1 blend to center UV
 uniform float uPosterize;
 uniform vec3 uColorHSL; // h (offset), s (mult), l (mult)
 uniform vec4 uEffects; // edge, invert, solarize, shift
+uniform float uEdgeQuality; // 1 = full Sobel (9-tap), 0 = fast Laplacian (5-tap)
 
 // Generator
 uniform float uGenType; // 0=none, 1=fib, 2=voronoi, 3=grid, 4=liquid, 5=plasma, 6=fractal
@@ -358,21 +359,32 @@ void main() {
         color.b = b;
     }
 
-    // Edge Detect (Sobel)
+    // Edge Detect — full 9-tap Sobel or fast 5-tap Laplacian depending on uEdgeQuality
     if (uEffects.x > 0.0) {
         vec2 texel = 1.0 / uResolution.xy;
-        float tl = dot(getContent(coord + texel * vec2(-1.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float t  = dot(getContent(coord + texel * vec2(0.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float tr = dot(getContent(coord + texel * vec2(1.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float l  = dot(getContent(coord + texel * vec2(-1.0, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float r  = dot(getContent(coord + texel * vec2(1.0, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float bl = dot(getContent(coord + texel * vec2(-1.0, -1.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float b  = dot(getContent(coord + texel * vec2(0.0, -1.0)).rgb, vec3(0.299, 0.587, 0.114));
-        float br = dot(getContent(coord + texel * vec2(1.0, -1.0)).rgb, vec3(0.299, 0.587, 0.114));
-
-        float gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
-        float gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
-        float edge = clamp(sqrt(gx * gx + gy * gy), 0.0, 1.0);
+        float edge;
+        if (uEdgeQuality > 0.5) {
+            // Full Sobel kernel (9 texture lookups)
+            float tl = dot(getContent(coord + texel * vec2(-1.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float t  = dot(getContent(coord + texel * vec2(0.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float tr = dot(getContent(coord + texel * vec2(1.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float l  = dot(getContent(coord + texel * vec2(-1.0, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float r  = dot(getContent(coord + texel * vec2(1.0, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float bl = dot(getContent(coord + texel * vec2(-1.0, -1.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float b  = dot(getContent(coord + texel * vec2(0.0, -1.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float br = dot(getContent(coord + texel * vec2(1.0, -1.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
+            float gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
+            edge = clamp(sqrt(gx * gx + gy * gy), 0.0, 1.0);
+        } else {
+            // Fast Laplacian approximation (5 texture lookups — ~45% fewer samples)
+            float c  = dot(getContent(coord).rgb,                              vec3(0.299, 0.587, 0.114));
+            float n  = dot(getContent(coord + texel * vec2( 0.0,  1.0)).rgb,  vec3(0.299, 0.587, 0.114));
+            float s  = dot(getContent(coord + texel * vec2( 0.0, -1.0)).rgb,  vec3(0.299, 0.587, 0.114));
+            float e  = dot(getContent(coord + texel * vec2( 1.0,  0.0)).rgb,  vec3(0.299, 0.587, 0.114));
+            float w  = dot(getContent(coord + texel * vec2(-1.0,  0.0)).rgb,  vec3(0.299, 0.587, 0.114));
+            edge = clamp(abs(4.0 * c - n - s - e - w), 0.0, 1.0);
+        }
         float edgeMix = clamp(uEffects.x * 0.01, 0.0, 1.0);
         color = mix(color, vec3(edge), edgeMix);
     }

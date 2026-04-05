@@ -19,35 +19,49 @@ const GEN_MAP      = { none: 0, fibonacci: 1, voronoi: 2, grid: 3, liquid: 4, pl
 // The Inner Scene
 function VisualizerScene() {
   const meshRef = useRef()
-  // Store Subscriptions
-  const image = useStore((state) => state.image)
-  const exportRequest = useStore((state) => state.ui.exportRequest)
-  const triggerExport = useStore((state) => state.triggerExport)
-  // Audio State
-  const audio = useStore((state) => state.audio || {})
-
-  // Recording State from Store (Triggers)
-  const recordingState = useStore((state) => state.recording)
-  const setRecording = useStore((state) => state.setRecording)
+  // Consolidated store subscription — fine-grained leaf values to avoid cascading re-renders.
+  const {
+    image,
+    exportRequest,
+    triggerExport,
+    audioEnabled,
+    audioSource,
+    audioFileUrl,
+    recordingIsActive,
+    setRecording,
+  } = useStore(
+    useShallow((state) => ({
+      image:            state.image,
+      exportRequest:    state.ui.exportRequest,
+      triggerExport:    state.triggerExport,
+      audioEnabled:     state.audio.enabled,
+      audioSource:      state.audio.source,
+      audioFileUrl:     state.audio.fileUrl,
+      recordingIsActive: state.recording.isActive,
+      setRecording:     state.setRecording,
+    }))
+  )
 
   const { gl, size } = useThree()
   const timeRef = useRef(0)
   const genTimeRef = useRef(0)
   const fluxDriftRef = useRef({ rotation: 0, scale: 0 })
   const imageAspect = useRef(1)
+  // Cache for stable (non-audio-reactive) uniform values to skip redundant writes.
+  const prevUniRef = useRef({})
 
   // Hooks
   const { isRecording, duration, startRecording, stopRecording } = useVideoRecorder(gl)
-  const { isReady: audioReady, getFrequencyData } = useAudioAnalyzer(audio.enabled, audio.source, audio.fileUrl)
+  const { isReady: audioReady, getFrequencyData } = useAudioAnalyzer(audioEnabled, audioSource, audioFileUrl)
 
   // ... (Video Recording UseEffects handled as before)
   useEffect(() => {
-    if (recordingState.isActive && !isRecording) {
+    if (recordingIsActive && !isRecording) {
       startRecording()
-    } else if (!recordingState.isActive && isRecording) {
+    } else if (!recordingIsActive && isRecording) {
       stopRecording()
     }
-  }, [recordingState.isActive, isRecording, startRecording, stopRecording])
+  }, [recordingIsActive, isRecording, startRecording, stopRecording])
 
   useEffect(() => {
     if (isRecording) setRecording('progress', duration)
@@ -82,6 +96,7 @@ function VisualizerScene() {
     uPosterize: { value: 256 },
     uColorHSL: { value: new THREE.Vector3(0, 1, 1) },
     uEffects: { value: new THREE.Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
+    uEdgeQuality: { value: 1 }, // 1 = full Sobel (9-tap), 0 = fast Laplacian (5-tap)
     uGenType: { value: 0 },
     uGenParams: { value: new THREE.Vector3(50, 50, 50) },
     // Audio Uniforms
@@ -198,23 +213,6 @@ function VisualizerScene() {
       transforms.rotation + (mid * rMid * 0.01) + fluxDrift.rotation
     )
 
-    uniformValues.uShape.value = canvas.shape === 'circle' ? 1 : 0
-    uniformValues.uSymEnabled.value = symmetry.enabled
-    uniformValues.uSymSlices.value = symmetry.slices
-    uniformValues.uSymType.value = SYM_TYPE_MAP[symmetry.type] || 0
-    uniformValues.uSymOffset.value = symmetry.offset || 0
-
-    uniformValues.uWarpType.value = WARP_MAP[warp.type] || 0
-
-    uniformValues.uDisplacement.value.set(displacement.amp, displacement.freq)
-
-    uniformValues.uTilingType.value = TILE_MAP[tiling.type] || 0
-    uniformValues.uTilingScale.value = tiling.scale
-    uniformValues.uTilingOverlap.value = tiling.overlap || 0
-
-    uniformValues.uPosterize.value = color.posterize
-    uniformValues.uColorHSL.value.set(color.hue, color.sat, color.light)
-
     // Effects react to highs?
     const reactiveMids = effects.solarize + (high * rHigh * 50)
     const perfCap = ui?.perfCapFx
@@ -226,10 +224,52 @@ function VisualizerScene() {
       effects.shift
     )
 
-    uniformValues.uGenType.value = GEN_MAP[generator.type] || 0
-    uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
+    // --- CACHED UNIFORM WRITES ---
+    // Skip writes for stable (non-audio-reactive) uniforms when values haven't changed.
+    const p = prevUniRef.current
 
-    // bass/mid/high are transient frame locals; no component subscribes to audio.meters
+    const shape = canvas.shape === 'circle' ? 1 : 0
+    if (p.shape !== shape) { uniformValues.uShape.value = shape; p.shape = shape }
+
+    if (p.symEnabled !== symmetry.enabled) { uniformValues.uSymEnabled.value = symmetry.enabled; p.symEnabled = symmetry.enabled }
+    if (p.symSlices !== symmetry.slices) { uniformValues.uSymSlices.value = symmetry.slices; p.symSlices = symmetry.slices }
+    const symType = SYM_TYPE_MAP[symmetry.type] || 0
+    if (p.symType !== symType) { uniformValues.uSymType.value = symType; p.symType = symType }
+    const symOffset = symmetry.offset || 0
+    if (p.symOffset !== symOffset) { uniformValues.uSymOffset.value = symOffset; p.symOffset = symOffset }
+
+    const warpType = WARP_MAP[warp.type] || 0
+    if (p.warpType !== warpType) { uniformValues.uWarpType.value = warpType; p.warpType = warpType }
+
+    if (p.dispAmp !== displacement.amp || p.dispFreq !== displacement.freq) {
+      uniformValues.uDisplacement.value.set(displacement.amp, displacement.freq)
+      p.dispAmp = displacement.amp; p.dispFreq = displacement.freq
+    }
+
+    const tilingType = TILE_MAP[tiling.type] || 0
+    if (p.tilingType !== tilingType) { uniformValues.uTilingType.value = tilingType; p.tilingType = tilingType }
+    if (p.tilingScale !== tiling.scale) { uniformValues.uTilingScale.value = tiling.scale; p.tilingScale = tiling.scale }
+    const tilingOverlap = tiling.overlap || 0
+    if (p.tilingOverlap !== tilingOverlap) { uniformValues.uTilingOverlap.value = tilingOverlap; p.tilingOverlap = tilingOverlap }
+
+    if (p.posterize !== color.posterize) { uniformValues.uPosterize.value = color.posterize; p.posterize = color.posterize }
+
+    if (p.hue !== color.hue || p.sat !== color.sat || p.light !== color.light) {
+      uniformValues.uColorHSL.value.set(color.hue, color.sat, color.light)
+      p.hue = color.hue; p.sat = color.sat; p.light = color.light
+    }
+
+    const genType = GEN_MAP[generator.type] || 0
+    if (p.genType !== genType) { uniformValues.uGenType.value = genType; p.genType = genType }
+
+    if (p.genP1 !== generator.param1 || p.genP2 !== generator.param2 || p.genP3 !== generator.param3) {
+      uniformValues.uGenParams.value.set(generator.param1, generator.param2, generator.param3)
+      p.genP1 = generator.param1; p.genP2 = generator.param2; p.genP3 = generator.param3
+    }
+
+    // Edge quality: full Sobel when uncapped, fast Laplacian when perfCapFx is active.
+    const edgeQuality = perfCap ? 0 : 1
+    if (p.edgeQuality !== edgeQuality) { uniformValues.uEdgeQuality.value = edgeQuality; p.edgeQuality = edgeQuality }
 
     // Debug Generators
     /* if (stateThree.clock.elapsedTime % 2 < 0.05) {

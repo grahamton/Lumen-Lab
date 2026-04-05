@@ -1,3 +1,4 @@
+import React from 'react'
 import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
@@ -18,13 +19,18 @@ function Toggle({ label, isOn, onToggle }) {
   )
 }
 
-export function SectionColor({ onInteract }) {
-  const { color, setColor, effectsInvert, setEffect } = useStore(
-    useShallow((state) => ({
-      color:         state.color,
-      setColor:      state.setColor,
-      effectsInvert: state.effects.invert,
-      setEffect:     state.setEffect,
+export const SectionColor = React.memo(function SectionColor({ onInteract }) {
+  // Fine-grained selectors: subscribe to individual leaf values so this component
+  // only re-renders when a specific color/effects value actually changes.
+  const { colorHue, colorSat, colorLight, colorPosterize, effectsInvert, setColor, setEffect } = useStore(
+    useShallow((s) => ({
+      colorHue:       s.color.hue,
+      colorSat:       s.color.sat,
+      colorLight:     s.color.light,
+      colorPosterize: s.color.posterize,
+      effectsInvert:  s.effects.invert,
+      setColor:       s.setColor,
+      setEffect:      s.setEffect,
     }))
   )
 
@@ -34,10 +40,10 @@ export function SectionColor({ onInteract }) {
 
   return (
     <div>
-      <ControlGroup section="color" param="hue"       value={color.hue}       onChange={wrap((v) => setColor('hue', v))} />
-      <ControlGroup section="color" param="sat"       value={color.sat}       onChange={wrap((v) => setColor('sat', v))} />
-      <ControlGroup section="color" param="light"     value={color.light}     onChange={wrap((v) => setColor('light', v))} />
-      <ControlGroup section="color" param="posterize" value={color.posterize} onChange={wrap((v) => setColor('posterize', v))} />
+      <ControlGroup section="color" param="hue"       value={colorHue}       onChange={wrap((v) => setColor('hue', v))} />
+      <ControlGroup section="color" param="sat"       value={colorSat}       onChange={wrap((v) => setColor('sat', v))} />
+      <ControlGroup section="color" param="light"     value={colorLight}     onChange={wrap((v) => setColor('light', v))} />
+      <ControlGroup section="color" param="posterize" value={colorPosterize} onChange={wrap((v) => setColor('posterize', v))} />
 
       <Toggle
         label="INVERT"
@@ -46,4 +52,4 @@ export function SectionColor({ onInteract }) {
       />
     </div>
   )
-}
+})

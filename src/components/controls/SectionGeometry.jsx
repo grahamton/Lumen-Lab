@@ -1,3 +1,4 @@
+import React from 'react'
 import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
@@ -24,19 +25,29 @@ function Toggle({ label, isOn, onToggle }) {
   )
 }
 
-export function SectionGeometry({ onInteract }) {
-  const { symmetry, setSymmetry, transforms, setTransform, warp, setWarp, displacement, setDisplacement, tiling, setTiling } = useStore(
-    useShallow((state) => ({
-      symmetry:        state.symmetry,
-      setSymmetry:     state.setSymmetry,
-      transforms:      state.transforms,
-      setTransform:    state.setTransform,
-      warp:            state.warp,
-      setWarp:         state.setWarp,
-      displacement:    state.displacement,
-      setDisplacement: state.setDisplacement,
-      tiling:          state.tiling,
-      setTiling:       state.setTiling,
+export const SectionGeometry = React.memo(function SectionGeometry({ onInteract }) {
+  // Fine-grained selectors: each primitive only triggers a re-render when its own value changes,
+  // preventing cascading re-renders during animation playback.
+  const {
+    symmetryEnabled, symmetrySlices,
+    transformsRotation, transformsX, transformsY,
+    displacementAmp, warpType, tilingType,
+    setSymmetry, setTransform, setWarp, setDisplacement, setTiling,
+  } = useStore(
+    useShallow((s) => ({
+      symmetryEnabled:    s.symmetry.enabled,
+      symmetrySlices:     s.symmetry.slices,
+      transformsRotation: s.transforms.rotation,
+      transformsX:        s.transforms.x,
+      transformsY:        s.transforms.y,
+      displacementAmp:    s.displacement.amp,
+      warpType:           s.warp.type,
+      tilingType:         s.tiling.type,
+      setSymmetry:        s.setSymmetry,
+      setTransform:       s.setTransform,
+      setWarp:            s.setWarp,
+      setDisplacement:    s.setDisplacement,
+      setTiling:          s.setTiling,
     }))
   )
 
@@ -48,12 +59,12 @@ export function SectionGeometry({ onInteract }) {
     <div>
       <Toggle
         label="KALEIDOSCOPE"
-        isOn={symmetry.enabled}
-        onToggle={wrap(() => setSymmetry('enabled', !symmetry.enabled))}
+        isOn={symmetryEnabled}
+        onToggle={wrap(() => setSymmetry('enabled', !symmetryEnabled))}
       />
-      <ControlGroup section="symmetry" param="slices" value={symmetry.slices} onChange={wrap((v) => setSymmetry('slices', v))} />
-      <ControlGroup section="transforms" param="rotation" value={transforms.rotation} onChange={wrap((v) => setTransform('rotation', v))} />
-      <ControlGroup section="displacement" param="amp" value={displacement.amp} onChange={wrap((v) => setDisplacement('amp', v))} />
+      <ControlGroup section="symmetry" param="slices" value={symmetrySlices} onChange={wrap((v) => setSymmetry('slices', v))} />
+      <ControlGroup section="transforms" param="rotation" value={transformsRotation} onChange={wrap((v) => setTransform('rotation', v))} />
+      <ControlGroup section="displacement" param="amp" value={displacementAmp} onChange={wrap((v) => setDisplacement('amp', v))} />
 
       <div className="mb-3">
         <p className="text-[9px] tracking-widest text-neutral-500 mb-1.5">WARP MODE</p>
@@ -62,9 +73,9 @@ export function SectionGeometry({ onInteract }) {
             <button
               key={value}
               onClick={wrap(() => setWarp('type', value))}
-              aria-pressed={warp.type === value}
+              aria-pressed={warpType === value}
               className={`flex-1 py-1 rounded text-[8px] tracking-wider border transition-colors ${
-                warp.type === value
+                warpType === value
                   ? 'bg-cyan-950 border-cyan-400 text-cyan-400'
                   : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
               }`}
@@ -75,14 +86,14 @@ export function SectionGeometry({ onInteract }) {
         </div>
       </div>
 
-      <ControlGroup section="transforms" param="x" value={transforms.x} onChange={wrap((v) => setTransform('x', v))} />
-      <ControlGroup section="transforms" param="y" value={transforms.y} onChange={wrap((v) => setTransform('y', v))} />
+      <ControlGroup section="transforms" param="x" value={transformsX} onChange={wrap((v) => setTransform('x', v))} />
+      <ControlGroup section="transforms" param="y" value={transformsY} onChange={wrap((v) => setTransform('y', v))} />
 
       <Toggle
         label="TILING"
-        isOn={tiling.type !== 'none'}
-        onToggle={wrap(() => setTiling('type', tiling.type === 'none' ? 'p4m' : 'none'))}
+        isOn={tilingType !== 'none'}
+        onToggle={wrap(() => setTiling('type', tilingType === 'none' ? 'p4m' : 'none'))}
       />
     </div>
   )
-}
+})

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '../store/useStore'
 
 // Exported for tests
-export const interpolateState = (s1, s2, t) => {
+export const interpolateState = (s1, s2, t, out) => {
   // Helper: Linear Interpolation
   const lerp = (start, end, t) => start * (1 - t) + end * t
   // Helper: Rotation Interpolation (Shortest Path)
@@ -23,51 +23,56 @@ export const interpolateState = (s1, s2, t) => {
   const eff1 = s1.effects || {}; const eff2 = s2.effects || {}
   const gen1 = s1.generator || {}; const gen2 = s2.generator || {}
 
-  return {
-    transforms: {
-      x: lerp(t1.x || 0, t2.x || 0, t),
-      y: lerp(t1.y || 0, t2.y || 0, t),
-      scale: lerp(t1.scale ?? 1, t2.scale ?? 1, t),
-      rotation: lerpAngle(t1.rotation || 0, t2.rotation || 0, t),
-    },
-    symmetry: {
-      enabled: t < 0.5 ? !!sym1.enabled : !!sym2.enabled,
-      type: t < 0.5 ? (sym1.type || 'radial') : (sym2.type || sym1.type || 'radial'),
-      offset: lerp(sym1.offset || 0, sym2.offset || 0, t),
-      slices: Math.round(lerp(sym1.slices || 6, sym2.slices || 6, t)),
-    },
-    warp: { type: t < 0.5 ? (w1.type || 'none') : (w2.type || w1.type || 'none') },
-    displacement: {
-      amp: lerp(d1.amp || 0, d2.amp || 0, t),
-      freq: lerp(d1.freq || 10, d2.freq || 10, t),
-    },
-    tiling: {
-      type: t < 0.5 ? (til1.type || 'none') : (til2.type || til1.type || 'none'),
-      scale: lerp(til1.scale ?? 1, til2.scale ?? 1, t),
-    },
-    color: {
-      posterize: lerp(c1.posterize || 256, c2.posterize || 256, t),
-      hue: lerp(c1.hue ?? 0.0, c2.hue ?? 0.0, t),
-      sat: lerp(c1.sat ?? 1.0, c2.sat ?? 1.0, t),
-      light: lerp(c1.light ?? 1.0, c2.light ?? 1.0, t),
-    },
-    effects: {
-      edgeDetect: lerp(eff1.edgeDetect || 0, eff2.edgeDetect || 0, t),
-      invert: lerp(eff1.invert || 0, eff2.invert || 0, t),
-      solarize: lerp(eff1.solarize || 0, eff2.solarize || 0, t),
-      shift: lerp(eff1.shift || 0, eff2.shift || 0, t),
-      bloom: lerp(eff1.bloom || 0, eff2.bloom || 0, t),
-      chromaticAberration: lerp(eff1.chromaticAberration || 0, eff2.chromaticAberration || 0, t),
-      noise: lerp(eff1.noise || 0, eff2.noise || 0, t),
-    },
-    generator: {
-      type: t < 0.5 ? (gen1.type || 'none') : (gen2.type || gen1.type || 'none'),
-      param1: lerp(gen1.param1 ?? 50, gen2.param1 ?? 50, t),
-      param2: lerp(gen1.param2 ?? 50, gen2.param2 ?? 50, t),
-      param3: lerp(gen1.param3 ?? 50, gen2.param3 ?? 50, t),
-      isAnimated: gen1.isAnimated ?? gen2.isAnimated, // pass through; not interpolated
-    }
-  }
+  // Reuse the provided out object (and its sub-objects) to avoid per-frame GC pressure.
+  // When out is omitted (e.g. in tests) fresh objects are created as before.
+  const o = out || {}
+  o.transforms   = o.transforms   || {}
+  o.symmetry     = o.symmetry     || {}
+  o.warp         = o.warp         || {}
+  o.displacement = o.displacement || {}
+  o.tiling       = o.tiling       || {}
+  o.color        = o.color        || {}
+  o.effects      = o.effects      || {}
+  o.generator    = o.generator    || {}
+
+  o.transforms.x        = lerp(t1.x || 0, t2.x || 0, t)
+  o.transforms.y        = lerp(t1.y || 0, t2.y || 0, t)
+  o.transforms.scale    = lerp(t1.scale ?? 1, t2.scale ?? 1, t)
+  o.transforms.rotation = lerpAngle(t1.rotation || 0, t2.rotation || 0, t)
+
+  o.symmetry.enabled = t < 0.5 ? !!sym1.enabled : !!sym2.enabled
+  o.symmetry.type    = t < 0.5 ? (sym1.type || 'radial') : (sym2.type || sym1.type || 'radial')
+  o.symmetry.offset  = lerp(sym1.offset || 0, sym2.offset || 0, t)
+  o.symmetry.slices  = Math.round(lerp(sym1.slices || 6, sym2.slices || 6, t))
+
+  o.warp.type = t < 0.5 ? (w1.type || 'none') : (w2.type || w1.type || 'none')
+
+  o.displacement.amp  = lerp(d1.amp || 0, d2.amp || 0, t)
+  o.displacement.freq = lerp(d1.freq || 10, d2.freq || 10, t)
+
+  o.tiling.type  = t < 0.5 ? (til1.type || 'none') : (til2.type || til1.type || 'none')
+  o.tiling.scale = lerp(til1.scale ?? 1, til2.scale ?? 1, t)
+
+  o.color.posterize = lerp(c1.posterize || 256, c2.posterize || 256, t)
+  o.color.hue       = lerp(c1.hue ?? 0.0, c2.hue ?? 0.0, t)
+  o.color.sat       = lerp(c1.sat ?? 1.0, c2.sat ?? 1.0, t)
+  o.color.light     = lerp(c1.light ?? 1.0, c2.light ?? 1.0, t)
+
+  o.effects.edgeDetect          = lerp(eff1.edgeDetect || 0, eff2.edgeDetect || 0, t)
+  o.effects.invert               = lerp(eff1.invert || 0, eff2.invert || 0, t)
+  o.effects.solarize             = lerp(eff1.solarize || 0, eff2.solarize || 0, t)
+  o.effects.shift                = lerp(eff1.shift || 0, eff2.shift || 0, t)
+  o.effects.bloom                = lerp(eff1.bloom || 0, eff2.bloom || 0, t)
+  o.effects.chromaticAberration  = lerp(eff1.chromaticAberration || 0, eff2.chromaticAberration || 0, t)
+  o.effects.noise                = lerp(eff1.noise || 0, eff2.noise || 0, t)
+
+  o.generator.type       = t < 0.5 ? (gen1.type || 'none') : (gen2.type || gen1.type || 'none')
+  o.generator.param1     = lerp(gen1.param1 ?? 50, gen2.param1 ?? 50, t)
+  o.generator.param2     = lerp(gen1.param2 ?? 50, gen2.param2 ?? 50, t)
+  o.generator.param3     = lerp(gen1.param3 ?? 50, gen2.param3 ?? 50, t)
+  o.generator.isAnimated = gen1.isAnimated ?? gen2.isAnimated // pass through; not interpolated
+
+  return o
 }
 
 export function useAnimator() {
@@ -76,6 +81,8 @@ export function useAnimator() {
   const startTimeRef = useRef()
   // const currentIndexRef = useRef(0) // Removed: Use store's activeStep for UI consistency if needed, checking below
   const directionRef = useRef(1) // 1 for forward, -1 for backward
+  // Persistent interpolation result object — reused each frame to avoid GC pressure.
+  const interpResultRef = useRef(null)
 
   // Easing Functions
   const easings = useMemo(() => ({
@@ -154,8 +161,14 @@ export function useAnimator() {
 
     if (!s1 || !s2) return
 
-    // Interpolate & Load
-    const currentState = interpolateState(s1, s2, progress)
+    // Interpolate & Load — reuse persistent object to avoid per-frame GC allocations.
+    if (!interpResultRef.current) {
+      interpResultRef.current = {
+        transforms: {}, symmetry: {}, warp: {}, displacement: {},
+        tiling: {}, color: {}, effects: {}, generator: {},
+      }
+    }
+    const currentState = interpolateState(s1, s2, progress, interpResultRef.current)
     if (currentState) loadSnapshot(currentState)
 
     // Cycle Complete?

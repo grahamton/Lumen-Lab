@@ -1,3 +1,4 @@
+import React from 'react'
 import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
@@ -18,15 +19,18 @@ function Toggle({ label, isOn, onToggle }) {
   )
 }
 
-export function SectionMotion({ onInteract }) {
-  const { globalPause, setUi, animation, setAnimation, flux, setFlux } = useStore(
-    useShallow((state) => ({
-      globalPause:  state.ui.globalPause,
-      setUi:        state.setUi,
-      animation:    state.animation,
-      setAnimation: state.setAnimation,
-      flux:         state.flux,
-      setFlux:      state.setFlux,
+export const SectionMotion = React.memo(function SectionMotion({ onInteract }) {
+  // Fine-grained selectors: subscribe to individual leaf values so this component
+  // only re-renders when a specific motion value actually changes.
+  const { globalPause, animationBpm, fluxEnabled, fluxAmount, setUi, setAnimation, setFlux } = useStore(
+    useShallow((s) => ({
+      globalPause:  s.ui.globalPause,
+      animationBpm: s.animation.bpm,
+      fluxEnabled:  s.flux.enabled,
+      fluxAmount:   s.flux.amount,
+      setUi:        s.setUi,
+      setAnimation: s.setAnimation,
+      setFlux:      s.setFlux,
     }))
   )
   const isPlaying = !globalPause
@@ -45,22 +49,22 @@ export function SectionMotion({ onInteract }) {
       <ControlGroup
         section="animation"
         param="speed"
-        value={animation.bpm}
+        value={animationBpm}
         onChange={wrap((v) => setAnimation('bpm', v))}
       />
       <Toggle
         label="DRIFT"
-        isOn={flux.enabled}
-        onToggle={wrap(() => setFlux('enabled', !flux.enabled))}
+        isOn={fluxEnabled}
+        onToggle={wrap(() => setFlux('enabled', !fluxEnabled))}
       />
-      {flux.enabled && (
+      {fluxEnabled && (
         <ControlGroup
           section="flux"
           param="amount"
-          value={flux.amount}
+          value={fluxAmount}
           onChange={wrap((v) => setFlux('amount', v))}
         />
       )}
     </div>
   )
-}
+})
