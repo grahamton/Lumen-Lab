@@ -107,8 +107,17 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
 
     analyserRef.current.getByteFrequencyData(dataArrayRef.current)
 
-    // Simple 3-band Split
+    // Skip full bin iteration when signal is below noise floor.
+    // Sample every 16th bin — fast O(n/16) check before the full O(n) pass.
+    const NOISE_FLOOR = 5
     const binCount = analyserRef.current.frequencyBinCount
+    let hasSignal = false
+    for (let i = 0; i < binCount; i += 16) {
+      if (dataArrayRef.current[i] > NOISE_FLOOR) { hasSignal = true; break }
+    }
+    if (!hasSignal) return { low: 0, mid: 0, high: 0 }
+
+    // Simple 3-band Split
     const lowBound = Math.floor(binCount * 0.1) // 0-10%
     const midBound = Math.floor(binCount * 0.4) // 10-40%
     // High is rest
