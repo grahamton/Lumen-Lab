@@ -422,7 +422,7 @@ export const useStore = create(
       })),
 
       setGenerator: (key, value) => {
-        set((state) => ({ generator: { ...state.generator, [key]: value } }))
+const SCHEMA_VERSION = 4 // Increment, do not decrement
       },
 
       setGeneratorBatch: (values) => {
