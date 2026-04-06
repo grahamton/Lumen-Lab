@@ -212,7 +212,7 @@ export function Controls() {
   }
 
   const applyGeneratorPreset = (preset) => {
-    Object.entries(preset).forEach(([key, val]) => store.setGenerator(key, val))
+    store.setGeneratorBatch(preset)
   }
 
   const renderSource = () => (

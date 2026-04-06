@@ -425,6 +425,10 @@ export const useStore = create(
         set((state) => ({ generator: { ...state.generator, [key]: value } }))
       },
 
+      setGeneratorBatch: (values) => {
+        set((state) => ({ generator: { ...state.generator, ...values } }))
+      },
+
       setCanvas: (key, value) => set((state) => ({
         canvas: { ...state.canvas, [key]: value }
       })),
