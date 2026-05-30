@@ -34,10 +34,10 @@ Lumen Lab is expanding from a single Windows desktop app into a **family of prod
 
 A self-hosted Progressive Web App version — same engine, browser-native.
 
-- [ ] Scaffold new repo: `lumenlab-web` (Vite + React + PWA plugin)
+- [x] Scaffold new repo: `lumenlab-web` (Vite + React + PWA plugin)
 - [ ] Extract shared visual engine into `@lumenlab/core` package
 - [ ] Web Audio API input (mic + file upload)
-- [ ] Service worker + offline support
+- [x] Service worker + offline support
 - [ ] Touch-optimized controls (swipe, pinch)
 - [ ] Deploy to `lumenlab.app` (self-hosted, no App Store)
 - [ ] Share URL for snapshots (encode state in URL hash)
