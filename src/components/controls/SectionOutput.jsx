@@ -145,8 +145,9 @@ export function SectionOutput({ onInteract }) {
   const liveSurfaceCount = renderableVisibleSurfaces.filter((surface) => surfaceSourceMetaById.get(surface.id)?.isLive).length
   const independentSurfaceCount = renderableVisibleSurfaces.filter((surface) => !surfaceSourceMetaById.get(surface.id)?.isLive).length
   const invalidSurfaceCount = visibleSurfaces.filter((surface) => !surfaceSourceMetaById.get(surface.id)?.isValid).length
+  const visibleNonLiveSurfaceCount = visibleSurfaces.filter((surface) => !surfaceSourceMetaById.get(surface.id)?.isLive).length
   const hasVisibleLiveSurface = hasRenderableLiveProjectionSurface(projection, projectionSourceOptions)
-  const firstVisibleSurface = visibleSurfaces[0] || null
+  const hasMixedStageState = liveSurfaceCount > 0 && independentSurfaceCount > 0
   const sourceOptions = [
     { value: 'live:live', label: 'LIVE OUTPUT' },
     ...(mediaLibrary || []).map((asset) => ({ value: `media:${asset.id}`, label: `MEDIA · ${asset.name}` })),
@@ -247,22 +248,19 @@ export function SectionOutput({ onInteract }) {
             Visible surfaces exist, but none have a valid renderable source right now.
           </div>
         )}
+        {hasMixedStageState && (
+          <div className="mt-2 rounded-md border border-neutral-700 bg-neutral-950/80 px-2 py-2 text-neutral-200">
+            Stage is mixed: {liveSurfaceCount} live, {independentSurfaceCount} independent. Only <span className="font-semibold">LIVE OUTPUT</span> surfaces respond to generator changes.
+          </div>
+        )}
         {!hasVisibleLiveSurface && visibleSurfaces.length > 0 && (
-          <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-amber-100">
-            <div>No visible surface is following the live generator.</div>
-            <div className="flex shrink-0 gap-1">
-              <button
-                type="button"
-                onClick={wrap(() => {
-                  const targetSurface = selectedSurface || firstVisibleSurface
-                  if (!targetSurface) return
-                  updateProjectionSurface(targetSurface.id, { sourceMode: 'live', sourceId: 'live' })
-                  setProjection('selectedSurfaceId', targetSurface.id)
-                })}
-                className="rounded border border-amber-500/40 bg-amber-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-400/20"
-              >
-                FOLLOW LIVE
-              </button>
+          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-amber-100">
+            No visible surface is following <span className="font-semibold">LIVE OUTPUT</span>. Generator and effect changes will not appear on stage.
+          </div>
+        )}
+        {(invalidSurfaceCount > 0 || visibleSurfaces.length > 0) && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {visibleNonLiveSurfaceCount > 0 && (
               <button
                 type="button"
                 onClick={wrap(() => setProjectionSurfacesLive(visibleSurfaces.map((surface) => surface.id)))}
@@ -270,11 +268,7 @@ export function SectionOutput({ onInteract }) {
               >
                 MAKE ALL LIVE
               </button>
-            </div>
-          </div>
-        )}
-        {(invalidSurfaceCount > 0 || visibleSurfaces.length > 0) && (
-          <div className="mt-2 flex flex-wrap gap-2">
+            )}
             {invalidSurfaceCount > 0 && (
               <button
                 type="button"
@@ -282,15 +276,6 @@ export function SectionOutput({ onInteract }) {
                 className="rounded border border-amber-500/40 bg-amber-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-400/20"
               >
                 RESET MISSING TO LIVE
-              </button>
-            )}
-            {hasVisibleLiveSurface && visibleSurfaces.length > 1 && (
-              <button
-                type="button"
-                onClick={wrap(() => setProjectionSurfacesLive(visibleSurfaces.map((surface) => surface.id)))}
-                className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-              >
-                MAKE VISIBLE LIVE
               </button>
             )}
           </div>
@@ -464,9 +449,9 @@ export function SectionOutput({ onInteract }) {
                         ? 'text-amber-300'
                         : surfaceSourceMetaById.get(surface.id)?.isLive
                           ? 'text-cyan-300'
-                          : 'text-neutral-500'
+                          : 'text-neutral-300'
                     }`}>
-                      {surfaceSourceMetaById.get(surface.id)?.detail || 'Follows the main generator and effect controls'}
+                      {surfaceSourceMetaById.get(surface.id)?.detail || 'Follows the main generator, geometry, color, and effect controls.'}
                     </div>
                   </button>
                   <div className="flex gap-1">
@@ -531,7 +516,7 @@ export function SectionOutput({ onInteract }) {
           <div className="mt-3 space-y-3 border-t border-neutral-800 pt-3">
             {!hasVisibleLiveSurface && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-[10px] leading-relaxed text-amber-200">
-                No mapped surface is using <span className="font-semibold">LIVE OUTPUT</span>, so generator and effect changes will not appear on stage.
+                No visible surface is following <span className="font-semibold">LIVE OUTPUT</span>. Generator and effect changes will not appear on stage.
                 <div className="mt-2">
                   <button
                     type="button"
@@ -570,7 +555,9 @@ export function SectionOutput({ onInteract }) {
                 ))}
               </select>
               <p className="mt-1.5 text-[9px] leading-relaxed text-neutral-500">
-                `LIVE OUTPUT` follows the main generator, geometry, color, and effect controls. Other source modes are intentionally independent.
+                {selectedSurfaceSourceMeta?.isLive
+                  ? '`LIVE OUTPUT` follows the main generator, geometry, color, and effect controls.'
+                  : 'This surface is independent from live controls until returned to `LIVE OUTPUT`.'}
               </p>
               {selectedSurfaceSourceMeta && !selectedSurfaceSourceMeta.isLive && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -637,7 +624,7 @@ export function SectionOutput({ onInteract }) {
               )}
               {selectedSurface.visible === false && (
                 <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-[9px] leading-relaxed text-amber-100">
-                  This surface is hidden and will not render on stage until it is shown again.
+                  This surface is hidden and will not render on stage until shown again.
                 </div>
               )}
             </div>

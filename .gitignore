@@ -26,3 +26,6 @@ release
 
 # Git worktrees
 .worktrees/
+
+# Local agent artifacts
+.codex-artifacts/

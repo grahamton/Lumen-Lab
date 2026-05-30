@@ -46,7 +46,7 @@ export function getProjectionSurfaceSourceMeta(surface, {
       isLive: true,
       isValid: true,
       label: 'LIVE OUTPUT',
-      detail: 'Follows the main generator and effect controls',
+      detail: 'Follows the main generator, geometry, color, and effect controls.',
     }
   }
 
@@ -58,7 +58,7 @@ export function getProjectionSurfaceSourceMeta(surface, {
       isLive: false,
       isValid: Boolean(asset),
       label: asset ? `MEDIA · ${asset.name}` : 'MEDIA · MISSING',
-      detail: asset ? 'Independent media assignment' : 'Assigned media asset is missing',
+      detail: asset ? 'Independent from live controls' : 'Assigned source is missing',
     }
   }
 
@@ -70,7 +70,7 @@ export function getProjectionSurfaceSourceMeta(surface, {
       isLive: false,
       isValid: Boolean(scene),
       label: scene ? `SCENE · ${scene.name}` : 'SCENE · MISSING',
-      detail: scene ? 'Reusable independent scene source' : 'Assigned scene source is missing',
+      detail: scene ? 'Independent from live controls' : 'Assigned source is missing',
     }
   }
 
@@ -84,7 +84,7 @@ export function getProjectionSurfaceSourceMeta(surface, {
       isLive: false,
       isValid,
       label: preset ? `BUILT-IN · ${preset.name}` : 'BUILT-IN · MISSING',
-      detail: preset ? 'Independent built-in preset source' : 'Assigned built-in source is missing',
+      detail: preset ? 'Independent from live controls' : 'Assigned source is missing',
     }
   }
 
@@ -96,7 +96,7 @@ export function getProjectionSurfaceSourceMeta(surface, {
       isLive: false,
       isValid: Boolean(preset),
       label: preset ? `USER · ${preset.name}` : 'USER · MISSING',
-      detail: preset ? 'Independent saved preset source' : 'Assigned user preset is missing',
+      detail: preset ? 'Independent from live controls' : 'Assigned source is missing',
     }
   }
 
@@ -106,7 +106,7 @@ export function getProjectionSurfaceSourceMeta(surface, {
     isLive: false,
     isValid: false,
     label: `${String(sourceMode).toUpperCase()} · UNKNOWN`,
-    detail: 'Assigned source type is not recognized',
+    detail: 'Assigned source is missing',
   }
 }
 

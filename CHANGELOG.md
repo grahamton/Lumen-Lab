@@ -2,6 +2,17 @@
 
 All notable changes to Lumen Lab are documented here.
 
+## [Unreleased]
+
+### Changed
+- Projection source messaging now explicitly distinguishes live, independent, and missing surface states
+- Output-panel recovery actions are normalized around `MAKE ALL LIVE` and `RESET MISSING TO LIVE`
+- Hidden-surface state copy is now deterministic and consistent in the selected-surface panel
+
+### Added
+- Mixed-stage warning when visible surfaces are split between `LIVE OUTPUT` and independent sources
+- Output-panel regression tests covering mixed-state, no-live, missing-source, and hide/show surface behavior
+
 ## [1.1.0] — 2026-04-04
 
 ### Added

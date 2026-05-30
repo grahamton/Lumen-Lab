@@ -168,6 +168,148 @@ describe('SectionOutput', () => {
     ))).toBe(true)
   })
 
+  it('shows a mixed-stage warning and unified recovery action', () => {
+    act(() => {
+      useStore.setState({
+        projection: {
+          ...useStore.getState().projection,
+          enabled: true,
+          selectedSurfaceId: 'surface-1',
+          surfaces: [
+            {
+              id: 'surface-1',
+              name: 'Surface 1',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'live',
+              sourceId: 'live',
+              points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+              maskPoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+            },
+            {
+              id: 'surface-2',
+              name: 'Surface 2',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'builtin',
+              sourceId: '0',
+              points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+              maskPoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+            },
+          ],
+        },
+      })
+    })
+
+    render(<SectionOutput />)
+
+    expect(screen.getByText(/Stage is mixed: 1 live, 1 independent\./i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'MAKE ALL LIVE' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'MAKE VISIBLE LIVE' })).not.toBeInTheDocument()
+  })
+
+  it('shows the no-live warning when all visible surfaces are independent', () => {
+    act(() => {
+      useStore.setState({
+        projection: {
+          ...useStore.getState().projection,
+          enabled: true,
+          selectedSurfaceId: 'surface-1',
+          surfaces: [
+            {
+              id: 'surface-1',
+              name: 'Surface 1',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'builtin',
+              sourceId: '0',
+              points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+              maskPoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+            },
+            {
+              id: 'surface-2',
+              name: 'Surface 2',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'builtin',
+              sourceId: '0',
+              points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+              maskPoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+            },
+          ],
+        },
+      })
+    })
+
+    render(<SectionOutput />)
+
+    expect(screen.getAllByText(/No visible surface is following/i)).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'MAKE ALL LIVE' })).toBeInTheDocument()
+  })
+
+  it('shows follow-live controls and independent copy for a selected non-live surface', () => {
+    act(() => {
+      useStore.setState({
+        projection: {
+          ...useStore.getState().projection,
+          enabled: true,
+          selectedSurfaceId: 'surface-1',
+          surfaces: [{
+            id: 'surface-1',
+            name: 'Surface 1',
+            visible: true,
+            opacity: 1,
+            blendMode: 'screen',
+            sourceMode: 'builtin',
+            sourceId: '0',
+            points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+            maskPoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+          }],
+        },
+      })
+    })
+
+    render(<SectionOutput />)
+
+    expect(screen.getAllByText('Independent from live controls').length).toBeGreaterThan(0)
+    expect(screen.getByText('This surface is independent from live controls until returned to `LIVE OUTPUT`.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'FOLLOW LIVE OUTPUT' })).toBeInTheDocument()
+  })
+
+  it('shows the hidden-surface message and toggles back cleanly', () => {
+    act(() => {
+      useStore.setState({
+        projection: {
+          ...useStore.getState().projection,
+          enabled: true,
+          selectedSurfaceId: 'surface-1',
+          surfaces: [{
+            id: 'surface-1',
+            name: 'Surface 1',
+            visible: false,
+            opacity: 1,
+            blendMode: 'screen',
+            sourceMode: 'live',
+            sourceId: 'live',
+            points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+            maskPoints: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+          }],
+        },
+      })
+    })
+
+    render(<SectionOutput />)
+
+    expect(document.body.textContent).toContain('This surface is hidden and will not render on stage until shown again.')
+    fireEvent.click(screen.getByRole('button', { name: 'SHOW SURFACE' }))
+    expect(useStore.getState().projection.surfaces[0].visible).toBe(true)
+    expect(document.body.textContent).not.toContain('This surface is hidden and will not render on stage until shown again.')
+  })
+
   it('loads scene state into the live controls from the scene library', () => {
     act(() => {
       useStore.setState({
