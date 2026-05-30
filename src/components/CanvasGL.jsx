@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability */
-import React, { useRef, useMemo, useEffect, useState } from 'react'
+import React, { useRef, useMemo, useEffect, useState, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { EffectComposer, Bloom, Noise, ChromaticAberration } from '@react-three/postprocessing'
@@ -8,20 +8,233 @@ import { useStore } from '../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { useVideoRecorder } from '../hooks/useVideoRecorder'
 import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
+import { ProjectionCalibrationOverlay } from './ProjectionCalibrationOverlay'
+import { ProjectionSurfaceEditorOverlay } from './ProjectionSurfaceEditorOverlay'
+import { presets } from '../presets'
 import vertShader from '../shaders/visualizer.vert?raw'
 import fragShader from '../shaders/visualizer.frag?raw'
+import {
+  getOutputRect,
+  getProjectionTargetPoints,
+  getProjectionTransform,
+} from '../utils/projectionMapping'
+import {
+  collectProjectionSourceDefinitions,
+  getProjectionSourceKey,
+  hasValidProjectionSurfaceSource,
+} from '../utils/projectionSources'
+import {
+  updateProjectionCanvasRegistry,
+} from '../utils/projectionCanvasRegistry'
+import { isProjectionWindow } from '../utils/windowMode'
 
 const SYM_TYPE_MAP = { radial: 0, mirrorX: 1, mirrorY: 2 }
 const WARP_MAP     = { none: 0, polar: 1, 'log-polar': 2 }
 const TILE_MAP     = { none: 0, p1: 1, p2: 2, p4m: 3 }
 const GEN_MAP      = { none: 0, fibonacci: 1, voronoi: 2, grid: 3, liquid: 4, plasma: 5, fractal: 6 }
+const projectionWindowMode = isProjectionWindow()
+const BLEND_MODE_MAP = {
+  normal: 'normal',
+  screen: 'screen',
+  add: 'plus-lighter',
+  multiply: 'multiply',
+}
+
+function mergeRenderState(baseState, overrideState = {}) {
+  return {
+    ...baseState,
+    media: overrideState.media === undefined ? baseState.media : overrideState.media,
+    activeMediaId: overrideState.activeMediaId ?? baseState.activeMediaId,
+    transforms: { ...baseState.transforms, ...(overrideState.transforms || {}) },
+    symmetry: { ...baseState.symmetry, ...(overrideState.symmetry || {}) },
+    warp: { ...baseState.warp, ...(overrideState.warp || {}) },
+    displacement: { ...baseState.displacement, ...(overrideState.displacement || {}) },
+    tiling: { ...baseState.tiling, ...(overrideState.tiling || {}) },
+    color: { ...baseState.color, ...(overrideState.color || {}) },
+    effects: { ...baseState.effects, ...(overrideState.effects || {}) },
+    generator: { ...baseState.generator, ...(overrideState.generator || {}) },
+    audio: { ...baseState.audio, ...(overrideState.audio || {}) },
+    flux: { ...baseState.flux, ...(overrideState.flux || {}) },
+    canvas: { ...baseState.canvas, ...(overrideState.canvas || {}) },
+    ui: { ...baseState.ui, ...(overrideState.ui || {}) },
+  }
+}
+
+function ProjectionPatternStage({ blackout, patternMode, patternType }) {
+  if (blackout) {
+    return <div className="absolute inset-0 bg-black" />
+  }
+
+  if (patternMode === 'off') return null
+
+  const overlayClass = patternMode === 'replace'
+    ? 'absolute inset-0 bg-black'
+    : 'absolute inset-0 bg-transparent mix-blend-screen'
+
+  return (
+    <div className={overlayClass}>
+      <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" fill="none">
+        {patternType === 'checker' && (
+          <>
+            {Array.from({ length: 8 }).map((_, row) => (
+              Array.from({ length: 8 }).map((__, col) => (
+                <rect
+                  key={`checker-${row}-${col}`}
+                  x={col * 12.5}
+                  y={row * 12.5}
+                  width="12.5"
+                  height="12.5"
+                  fill={(row + col) % 2 === 0 ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)'}
+                />
+              ))
+            ))}
+          </>
+        )}
+        {patternType !== 'checker' && (
+          <>
+            <rect x="0.5" y="0.5" width="99" height="99" stroke="rgba(255,255,255,0.92)" strokeWidth="1" />
+            {patternType === 'grid' && Array.from({ length: 9 }).map((_, index) => {
+              const position = (index + 1) * 10
+              return (
+                <g key={`grid-${position}`}>
+                  <line x1={position} y1="0" x2={position} y2="100" stroke={position === 50 ? 'rgba(34,211,238,0.95)' : 'rgba(255,255,255,0.4)'} strokeWidth={position === 50 ? '0.8' : '0.45'} />
+                  <line x1="0" y1={position} x2="100" y2={position} stroke={position === 50 ? 'rgba(34,211,238,0.95)' : 'rgba(255,255,255,0.4)'} strokeWidth={position === 50 ? '0.8' : '0.45'} />
+                </g>
+              )
+            })}
+            {patternType === 'crosshair' && (
+              <>
+                <line x1="50" y1="0" x2="50" y2="100" stroke="rgba(34,211,238,0.95)" strokeWidth="0.9" />
+                <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(34,211,238,0.95)" strokeWidth="0.9" />
+                <circle cx="50" cy="50" r="12" stroke="rgba(255,255,255,0.75)" strokeWidth="0.7" />
+                <circle cx="50" cy="50" r="24" stroke="rgba(255,255,255,0.35)" strokeWidth="0.5" />
+              </>
+            )}
+            <circle cx="50" cy="50" r="1.4" fill="rgba(255,80,80,0.95)" />
+            <circle cx="0.8" cy="0.8" r="0.9" fill="rgba(255,255,255,0.95)" />
+            <circle cx="99.2" cy="0.8" r="0.9" fill="rgba(255,255,255,0.95)" />
+            <circle cx="99.2" cy="99.2" r="0.9" fill="rgba(255,255,255,0.95)" />
+            <circle cx="0.8" cy="99.2" r="0.9" fill="rgba(255,255,255,0.95)" />
+          </>
+        )}
+      </svg>
+    </div>
+  )
+}
+
+function ProjectionSourceCanvas({ sourceKey, renderStateResolver, mediaDescriptor, width, height, dpr, onCanvasReady }) {
+  useEffect(() => {
+    return () => {
+      onCanvasReady(sourceKey, null)
+    }
+  }, [onCanvasReady, sourceKey])
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: '-99999px',
+        top: 0,
+        width: `${width}px`,
+        height: `${height}px`,
+        opacity: 0,
+        pointerEvents: 'none',
+      }}
+    >
+      <Canvas
+        gl={{
+          preserveDrawingBuffer: true,
+          antialias: false,
+          powerPreference: 'high-performance',
+        }}
+        dpr={dpr}
+        camera={{ position: [0, 0, 1] }}
+        onCreated={({ gl }) => onCanvasReady(sourceKey, gl.domElement)}
+      >
+        <VisualizerScene
+          renderState={renderStateResolver}
+          mediaDescriptor={mediaDescriptor}
+          preferImageElement={false}
+          enableOutputActions={false}
+          useMirroredAudio={true}
+        />
+        <EffectsLayer />
+      </Canvas>
+    </div>
+  )
+}
+
+function ProjectionSurfaceCanvas({ surface, sourceCanvas, sourceRect }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    const outputCanvas = canvasRef.current
+    if (!outputCanvas) return undefined
+
+    const context = outputCanvas.getContext('2d')
+    if (!sourceCanvas) {
+      context?.clearRect(0, 0, outputCanvas.width, outputCanvas.height)
+      return undefined
+    }
+
+    let frameId = null
+
+    const syncFrame = () => {
+      if (!outputCanvas || !sourceCanvas || !context) return
+
+      if (outputCanvas.width !== sourceCanvas.width || outputCanvas.height !== sourceCanvas.height) {
+        outputCanvas.width = sourceCanvas.width
+        outputCanvas.height = sourceCanvas.height
+      }
+
+      context.clearRect(0, 0, outputCanvas.width, outputCanvas.height)
+      context.drawImage(sourceCanvas, 0, 0, outputCanvas.width, outputCanvas.height)
+      frameId = requestAnimationFrame(syncFrame)
+    }
+
+    syncFrame()
+    return () => {
+      if (frameId) cancelAnimationFrame(frameId)
+    }
+  }, [sourceCanvas])
+
+  const targetPoints = surface.points.map((point) => ({
+    x: point.x * sourceRect.width,
+    y: point.y * sourceRect.height,
+  }))
+  const transform = getProjectionTransform(sourceRect, targetPoints)
+  const clipPath = (surface.maskPoints || [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 },
+  ])
+    .map((point) => `${(point.x * 100).toFixed(2)}% ${(point.y * 100).toFixed(2)}%`)
+    .join(', ')
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute left-0 top-0 pointer-events-none"
+      style={{
+        width: `${sourceRect.width}px`,
+        height: `${sourceRect.height}px`,
+        transformOrigin: '0 0',
+        transform,
+        opacity: surface.opacity ?? 1,
+        mixBlendMode: BLEND_MODE_MAP[surface.blendMode] || 'screen',
+        clipPath: `polygon(${clipPath})`,
+      }}
+    />
+  )
+}
 
 // The Inner Scene
-function VisualizerScene() {
+function VisualizerScene({ renderState = null, mediaDescriptor = null, preferImageElement = true, enableOutputActions = true, useMirroredAudio = false }) {
   const meshRef = useRef()
-  // Consolidated store subscription — fine-grained leaf values to avoid cascading re-renders.
   const {
     image,
+    liveMedia,
     exportRequest,
     triggerExport,
     audioEnabled,
@@ -29,16 +242,19 @@ function VisualizerScene() {
     audioFileUrl,
     recordingIsActive,
     setRecording,
+    setAudio,
   } = useStore(
     useShallow((state) => ({
-      image:            state.image,
-      exportRequest:    state.ui.exportRequest,
-      triggerExport:    state.triggerExport,
-      audioEnabled:     state.audio.enabled,
-      audioSource:      state.audio.source,
-      audioFileUrl:     state.audio.fileUrl,
+      image: state.image,
+      liveMedia: state.media,
+      exportRequest: state.ui.exportRequest,
+      triggerExport: state.triggerExport,
+      audioEnabled: state.audio.enabled,
+      audioSource: state.audio.source,
+      audioFileUrl: state.audio.fileUrl,
       recordingIsActive: state.recording.isActive,
-      setRecording:     state.setRecording,
+      setRecording: state.setRecording,
+      setAudio: state.setAudio,
     }))
   )
 
@@ -49,23 +265,31 @@ function VisualizerScene() {
   const imageAspect = useRef(1)
   // Cache for stable (non-audio-reactive) uniform values to skip redundant writes.
   const prevUniRef = useRef({})
+  const [resolvedMedia, setResolvedMedia] = useState(null)
+  const lastMeterSyncRef = useRef(0)
+  const effectiveMedia = mediaDescriptor ?? liveMedia
 
   // Hooks
   const { isRecording, duration, startRecording, stopRecording } = useVideoRecorder(gl)
-  const { isReady: audioReady, getFrequencyData } = useAudioAnalyzer(audioEnabled, audioSource, audioFileUrl)
+  const { isReady: audioReady, getFrequencyData } = useAudioAnalyzer(
+    !projectionWindowMode && !useMirroredAudio && audioEnabled,
+    audioSource,
+    audioFileUrl
+  )
 
-  // ... (Video Recording UseEffects handled as before)
   useEffect(() => {
+    if (projectionWindowMode || !enableOutputActions) return undefined
     if (recordingIsActive && !isRecording) {
       startRecording()
     } else if (!recordingIsActive && isRecording) {
       stopRecording()
     }
-  }, [recordingIsActive, isRecording, startRecording, stopRecording])
+  }, [enableOutputActions, isRecording, recordingIsActive, startRecording, stopRecording])
 
   useEffect(() => {
+    if (projectionWindowMode || !enableOutputActions) return
     if (isRecording) setRecording('progress', duration)
-  }, [duration, isRecording, setRecording])
+  }, [duration, enableOutputActions, isRecording, setRecording])
 
 
   const [texture] = useState(() => {
@@ -104,42 +328,122 @@ function VisualizerScene() {
     uAudioMid: { value: 0 },
     uAudioHigh: { value: 0 }
   }))
+  const clearResolvedTexture = useCallback(() => {
+    const uniformValues = uniforms
+    const currentTexture = uniformValues.uTexture.value
+
+    if (currentTexture && currentTexture !== texture && typeof currentTexture.dispose === 'function') {
+      currentTexture.dispose()
+    }
+
+    texture.image = new Image()
+    texture.needsUpdate = true
+    uniformValues.uTexture.value = texture
+    uniformValues.uImageAspect.value = 1
+  }, [texture, uniforms])
 
   // ... (rest of useEffects)
-  // Sync Texture when image changes
-  // Sync Texture when image changes
   useEffect(() => {
-    if (!image) return
+    if (preferImageElement && image) {
+      setResolvedMedia(image)
+      return undefined
+    }
 
-    const isVideo = image.tagName === 'VIDEO'
+    if (!effectiveMedia?.src || !effectiveMedia?.type) {
+      setResolvedMedia(null)
+      return undefined
+    }
+
+    let disposed = false
+    setResolvedMedia(null)
+
+    if (effectiveMedia.type === 'video') {
+      const video = document.createElement('video')
+      video.src = effectiveMedia.src
+      video.loop = true
+      video.muted = true
+      video.playsInline = true
+
+      const handleLoaded = () => {
+        if (disposed) return
+        setResolvedMedia(video)
+        video.play().catch(() => {})
+      }
+
+      video.addEventListener('loadeddata', handleLoaded, { once: true })
+      video.addEventListener('error', () => {
+        if (!disposed) {
+          setResolvedMedia(null)
+        }
+      }, { once: true })
+      video.load()
+
+      return () => {
+        disposed = true
+        video.pause()
+      }
+    }
+
+    const nextImage = new Image()
+    const handleLoaded = () => {
+      if (!disposed) {
+        setResolvedMedia(nextImage)
+      }
+    }
+
+    nextImage.addEventListener('load', handleLoaded, { once: true })
+    nextImage.addEventListener('error', () => {
+      if (!disposed) {
+        setResolvedMedia(null)
+      }
+    }, { once: true })
+    nextImage.src = effectiveMedia.src
+
+    return () => {
+      disposed = true
+    }
+  }, [effectiveMedia, image, preferImageElement])
+
+  useEffect(() => {
+    if (!resolvedMedia) {
+      clearResolvedTexture()
+      return
+    }
+
+    const isVideo = resolvedMedia.tagName === 'VIDEO'
     // For video, wait for readyState; for image, check complete
-    if (isVideo && image.readyState < 2) return
-    if (!isVideo && !image.complete) return
+    if (isVideo && resolvedMedia.readyState < 2) return
+    if (!isVideo && !resolvedMedia.complete) return
 
     const uniformValues = uniforms
-    let finalTexture = texture
+    const currentTexture = uniformValues.uTexture.value
+    let finalTexture = currentTexture
 
     // If switching types, create new texture instance
     if (isVideo && !(finalTexture instanceof THREE.VideoTexture)) {
-      finalTexture = new THREE.VideoTexture(image)
+      finalTexture = new THREE.VideoTexture(resolvedMedia)
+      if (currentTexture && currentTexture !== texture && typeof currentTexture.dispose === 'function') {
+        currentTexture.dispose()
+      }
       uniformValues.uTexture.value = finalTexture
     } else if (!isVideo && (finalTexture instanceof THREE.VideoTexture)) {
-      finalTexture = new THREE.Texture(image)
+      finalTexture = new THREE.Texture(resolvedMedia)
+      currentTexture.dispose()
       uniformValues.uTexture.value = finalTexture
     }
 
-    finalTexture.image = image
+    finalTexture.image = resolvedMedia
     finalTexture.needsUpdate = true
 
     // Update Aspect Ratio
-    let w = isVideo ? image.videoWidth : image.naturalWidth
-    let h = isVideo ? image.videoHeight : image.naturalHeight
+    let w = isVideo ? resolvedMedia.videoWidth : resolvedMedia.naturalWidth
+    let h = isVideo ? resolvedMedia.videoHeight : resolvedMedia.naturalHeight
 
     if (h > 0) {
       imageAspect.current = w / h
       uniformValues.uImageAspect.value = imageAspect.current
     }
-  }, [image, texture, uniforms])
+  }, [clearResolvedTexture, resolvedMedia, texture, uniforms])
 
   // Resize Handler
   useEffect(() => {
@@ -151,10 +455,14 @@ function VisualizerScene() {
   // Render Loop (60FPS)
   useFrame((stateThree, delta) => {
     const uniformValues = uniforms
+    const sourceState = typeof renderState === 'function'
+      ? renderState(useStore.getState())
+      : (renderState || useStore.getState())
+
     const {
       transforms, symmetry, warp, displacement, tiling,
       color, effects, generator, audio: audioState, ui, flux, canvas
-    } = useStore.getState() // Access fresh state without re-render
+    } = sourceState
 
     // Time Logic: Always translate global time
     if (!ui.globalPause) {
@@ -169,7 +477,11 @@ function VisualizerScene() {
 
     // Audio Analysis
     let bass = 0, mid = 0, high = 0
-    if (audioState.enabled && audioReady) {
+    if ((projectionWindowMode || useMirroredAudio) && audioState.enabled) {
+      bass = audioState.meters?.bass || 0
+      mid = audioState.meters?.mid || 0
+      high = audioState.meters?.high || 0
+    } else if (audioState.enabled && audioReady) {
       const freq = getFrequencyData()
       // Normalize 0-255 to 0-1 range
       // Apply sensitivity
@@ -178,6 +490,11 @@ function VisualizerScene() {
       bass = (freq.low / 255) * sens
       mid = (freq.mid / 255) * sens
       high = (freq.high / 255) * sens
+    }
+
+    if (!projectionWindowMode && enableOutputActions && !useMirroredAudio && audioState.enabled && stateThree.clock.elapsedTime - lastMeterSyncRef.current > 0.05) {
+      lastMeterSyncRef.current = stateThree.clock.elapsedTime
+      setAudio('meters', { bass, mid, high })
     }
 
     // Audio Uniforms
@@ -279,6 +596,7 @@ function VisualizerScene() {
 
   // Export Request Handler (Safe RenderTarget Method)
   useEffect(() => {
+    if (!enableOutputActions) return undefined
     if (exportRequest) {
       try {
         const { width, height, filename } = exportRequest
@@ -347,7 +665,7 @@ function VisualizerScene() {
         triggerExport(null)
       }
     }
-  }, [exportRequest, gl, triggerExport, uniforms])
+  }, [enableOutputActions, exportRequest, gl, triggerExport, uniforms])
 
   return (
     <mesh ref={meshRef}>
@@ -386,45 +704,243 @@ function EffectsLayer() {
 }
 
 export function CanvasGL() {
-  const { canvasWidth, canvasHeight, canvasAspect, lowResPreview } = useStore(
+  const {
+    canvasWidth,
+    canvasHeight,
+    canvasAspect,
+    lowResPreview,
+    mediaLibrary,
+    scenes,
+    projection,
+    userPresets,
+    setProjection,
+    setProjectionPoint,
+    setProjectionPoints,
+  } = useStore(
     useShallow((state) => ({
       canvasWidth:   state.canvas.width,
       canvasHeight:  state.canvas.height,
       canvasAspect:  state.canvas.aspect,
       lowResPreview: state.ui.lowResPreview,
+      mediaLibrary:  state.mediaLibrary,
+      scenes:        state.scenes,
+      projection:    state.projection,
+      userPresets:   state.userPresets,
+      setProjection: state.setProjection,
+      setProjectionPoint: state.setProjectionPoint,
+      setProjectionPoints: state.setProjectionPoints,
     }))
   )
+  const [sourceCanvasElement, setSourceCanvasElement] = useState(null)
+  const [auxSourceCanvases, setAuxSourceCanvases] = useState({})
 
-  // Calculate viewport style (Letterboxing)
-  const style = useMemo(() => {
-    if (canvasAspect === 'free') return { width: '100%', height: '100%' }
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }))
 
-    const targetAspect = canvasWidth / canvasHeight
-    const windowAspect = window.innerWidth / window.innerHeight
-
-    if (windowAspect > targetAspect) {
-      return { height: '100vh', width: `${100 * targetAspect / windowAspect}vw`, transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }
-    } else {
-      return { width: '100vw', height: `${100 * windowAspect / targetAspect}vh`, transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }
+  useEffect(() => {
+    function handleResize() {
+      setViewport({ width: window.innerWidth, height: window.innerHeight })
     }
-  }, [canvasWidth, canvasHeight, canvasAspect])
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const rect = useMemo(
+    () => getOutputRect(viewport.width, viewport.height, canvasWidth, canvasHeight, canvasAspect),
+    [viewport.width, viewport.height, canvasWidth, canvasHeight, canvasAspect]
+  )
+  const visibleSurfaces = useMemo(
+    () => (projection.surfaces || []).filter((surface) => surface.visible !== false),
+    [projection.surfaces]
+  )
+  const renderableVisibleSurfaces = useMemo(
+    () => visibleSurfaces.filter((surface) => (
+      hasValidProjectionSurfaceSource(surface, {
+        mediaLibrary,
+        scenes,
+        userPresets,
+        builtinPresetCount: presets.length,
+      })
+    )),
+    [mediaLibrary, scenes, userPresets, visibleSurfaces]
+  )
+  const surfaceModeActive = projection.enabled && renderableVisibleSurfaces.length > 0
+  const hasVisibleLiveSurface = useMemo(
+    () => renderableVisibleSurfaces.some((surface) => getProjectionSourceKey(surface) === 'live'),
+    [renderableVisibleSurfaces]
+  )
+  const surfaceEditingActive = surfaceModeActive && projection.editingSurfaces
+  const sourceRect = useMemo(
+    () => ({ left: 0, top: 0, width: rect.width, height: rect.height }),
+    [rect.height, rect.width]
+  )
+  const sourceDescriptors = useMemo(() => {
+    if (!surfaceModeActive) return []
+
+    return collectProjectionSourceDefinitions(renderableVisibleSurfaces, {
+      mediaLibrary,
+      scenes,
+      userPresets,
+      builtinPresets: presets,
+    }).map((definition) => ({
+      key: definition.key,
+      mediaDescriptor: definition.mediaDescriptor,
+      resolveState: (storeState) => mergeRenderState(storeState, definition.stateOverride || {}),
+    }))
+  }, [mediaLibrary, renderableVisibleSurfaces, scenes, surfaceModeActive, userPresets])
+  const registerAuxSourceCanvas = useCallback((sourceKey, canvasElement) => {
+    setAuxSourceCanvases((current) => updateProjectionCanvasRegistry(current, sourceKey, canvasElement))
+  }, [])
+
+  const identityTargetPoints = useMemo(() => getProjectionTargetPoints(null, rect, viewport.width, viewport.height), [rect, viewport.width, viewport.height])
+
+  const activeTargetPoints = useMemo(
+    () => (
+      projection.enabled
+        ? getProjectionTargetPoints(projection.points, rect, viewport.width, viewport.height)
+        : identityTargetPoints
+    ),
+    [identityTargetPoints, projection.enabled, projection.points, rect, viewport.height, viewport.width]
+  )
+
+  const outputTransform = useMemo(
+    () => getProjectionTransform(rect, activeTargetPoints),
+    [rect, activeTargetPoints]
+  )
+  const surfaceStageTransform = useMemo(
+    () => (
+      surfaceEditingActive
+        ? `translate(${rect.left}px, ${rect.top}px)`
+        : outputTransform
+    ),
+    [outputTransform, rect.left, rect.top, surfaceEditingActive]
+  )
+  const surfaceStageReady = surfaceModeActive && (!hasVisibleLiveSurface || Boolean(sourceCanvasElement))
+
+  const handleCalibrationPointChange = useCallback((index, point) => {
+    if (!projection.points || projection.points.length !== 4) {
+      const nextPoints = identityTargetPoints.map((targetPoint, targetIndex) => ({
+        x: targetIndex === index ? point.x : targetPoint.x / Math.max(1, viewport.width),
+        y: targetIndex === index ? point.y : targetPoint.y / Math.max(1, viewport.height),
+      }))
+      setProjectionPoints(nextPoints)
+      return
+    }
+
+    setProjectionPoint(index, point)
+  }, [identityTargetPoints, projection.points, setProjectionPoint, setProjectionPoints, viewport.height, viewport.width])
 
   return (
     <div className="w-full h-full bg-neutral-900 flex items-center justify-center overflow-hidden relative">
-      <div style={{ ...style, position: 'relative' }}>
-        <Canvas
-          gl={{
-            preserveDrawingBuffer: true, // Needed for Export & Recording
-            antialias: false,
-            powerPreference: "high-performance"
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: `${rect.width}px`,
+          height: `${rect.height}px`,
+          transformOrigin: '0 0',
+          transform: surfaceModeActive ? 'none' : outputTransform,
+          transition: projection.calibrating || projection.editingSurfaces ? 'none' : 'transform 180ms ease-out',
+          opacity: surfaceModeActive ? 0 : 1,
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: projection.blackout || projection.patternMode === 'replace' ? 0 : 1,
           }}
-          dpr={lowResPreview ? 0.75 : undefined}
-          camera={{ position: [0, 0, 1] }}
         >
-          <VisualizerScene />
-          <EffectsLayer />
-        </Canvas>
+          <Canvas
+            gl={{
+              preserveDrawingBuffer: true, // Needed for Export & Recording
+              antialias: false,
+              powerPreference: "high-performance"
+            }}
+            dpr={lowResPreview ? 0.75 : undefined}
+            camera={{ position: [0, 0, 1] }}
+            onCreated={({ gl }) => setSourceCanvasElement(gl.domElement)}
+          >
+            <VisualizerScene
+              enableOutputActions={!projectionWindowMode}
+              useMirroredAudio={projectionWindowMode}
+            />
+            <EffectsLayer />
+          </Canvas>
+        </div>
+        <ProjectionPatternStage
+          blackout={projection.blackout}
+          patternMode={projection.patternMode}
+          patternType={projection.patternType}
+        />
       </div>
+      {sourceDescriptors.map((descriptor) => (
+        <ProjectionSourceCanvas
+          key={descriptor.key}
+          sourceKey={descriptor.key}
+          renderStateResolver={descriptor.resolveState}
+          mediaDescriptor={descriptor.mediaDescriptor}
+          width={rect.width}
+          height={rect.height}
+          dpr={lowResPreview ? 0.75 : undefined}
+          onCanvasReady={registerAuxSourceCanvas}
+        />
+      ))}
+      {surfaceStageReady && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: `${rect.width}px`,
+            height: `${rect.height}px`,
+            transformOrigin: '0 0',
+            transform: surfaceStageTransform,
+            transition: projection.calibrating || projection.editingSurfaces ? 'none' : 'transform 180ms ease-out',
+            pointerEvents: 'none',
+          }}
+        >
+          {renderableVisibleSurfaces.map((surface) => (
+            <ProjectionSurfaceCanvas
+              key={surface.id}
+              surface={surface}
+              sourceCanvas={
+                getProjectionSourceKey(surface) === 'live'
+                  ? sourceCanvasElement
+                  : (auxSourceCanvases[getProjectionSourceKey(surface)] || null)
+              }
+              sourceRect={sourceRect}
+            />
+          ))}
+          <ProjectionPatternStage
+            blackout={projection.blackout}
+            patternMode={projection.patternMode}
+            patternType={projection.patternType}
+          />
+        </div>
+      )}
+      {!projectionWindowMode && projection.calibrating && !projection.editingSurfaces && (
+        <ProjectionCalibrationOverlay
+          projectionPoints={projection.points}
+          rect={rect}
+          viewportWidth={viewport.width}
+          viewportHeight={viewport.height}
+          onChangePoint={handleCalibrationPointChange}
+          onClose={() => setProjection('calibrating', false)}
+        />
+      )}
+      {!projectionWindowMode && projection.editingSurfaces && surfaceModeActive && (
+        <ProjectionSurfaceEditorOverlay
+          rect={rect}
+          viewportWidth={viewport.width}
+          viewportHeight={viewport.height}
+        />
+      )}
     </div>
   )
 }

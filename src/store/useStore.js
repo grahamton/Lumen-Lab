@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { CONTROLS } from '../config/uiConfig'
+import { presets } from '../presets'
+import {
+  getProjectionSurfaceSceneState,
+  getProjectionSurfaceSourceMeta,
+} from '../utils/projectionSources'
 
 function debounce(fn, ms) {
   let timer
@@ -29,11 +34,141 @@ function debounce(fn, ms) {
 // Exposed so resetAll can flush any pending persist write before wiping localStorage
 let flushPersist = () => {}
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 6
+const PROJECT_DOCUMENT_VERSION = 1
+
+function cloneProjectData(value) {
+  if (value == null) return value
+  return JSON.parse(JSON.stringify(value))
+}
+
+function createSceneStateSnapshot(state) {
+  return {
+    transforms: { ...state.transforms },
+    symmetry: { ...state.symmetry },
+    warp: { ...state.warp },
+    displacement: { ...state.displacement },
+    tiling: { ...state.tiling },
+    color: { ...state.color },
+    effects: { ...state.effects },
+    generator: { ...state.generator },
+    media: state.media ? { ...state.media } : null,
+    activeMediaId: state.activeMediaId,
+  }
+}
+
+function applySceneStateSnapshot(state, snap) {
+  const lock = state.ui?.lockGeometry
+  const nextState = {
+    transforms: lock ? state.transforms : { ...snap.transforms },
+    symmetry: lock ? state.symmetry : { ...snap.symmetry },
+    warp: lock ? state.warp : { ...snap.warp },
+    displacement: { ...snap.displacement },
+    tiling: lock ? state.tiling : { ...snap.tiling },
+    color: { ...snap.color },
+    effects: { ...snap.effects },
+    generator: { ...snap.generator },
+  }
+
+  if (Object.hasOwn(snap, 'media')) {
+    nextState.media = snap.media ? { ...snap.media } : null
+    nextState.activeMediaId = snap.activeMediaId ?? snap.media?.id ?? null
+    nextState.image = null
+  }
+
+  return nextState
+}
+
+function createProjectProjectionState(projection) {
+  return {
+    enabled: Boolean(projection?.enabled),
+    points: cloneProjectData(projection?.points) || null,
+    showTestPattern: projection?.showTestPattern ?? DEFAULTS.projection.showTestPattern,
+    guideOpacity: projection?.guideOpacity ?? DEFAULTS.projection.guideOpacity,
+    nudgeStep: projection?.nudgeStep ?? DEFAULTS.projection.nudgeStep,
+    blackout: Boolean(projection?.blackout),
+    patternMode: projection?.patternMode || DEFAULTS.projection.patternMode,
+    patternType: projection?.patternType || DEFAULTS.projection.patternType,
+    profiles: cloneProjectData(projection?.profiles) || [],
+    displayId: projection?.displayId ?? null,
+    selectedSurfaceId: projection?.selectedSurfaceId ?? null,
+    surfaces: cloneProjectData(projection?.surfaces) || [],
+  }
+}
+
+function createProjectDocument(state) {
+  return {
+    type: 'lumenlab-project',
+    version: PROJECT_DOCUMENT_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    project: {
+      liveState: createSceneStateSnapshot(state),
+      canvas: cloneProjectData(state.canvas),
+      mediaLibrary: cloneProjectData(state.mediaLibrary) || [],
+      projection: createProjectProjectionState(state.projection),
+      snapshots: cloneProjectData(state.snapshots) || [],
+      scenes: cloneProjectData(state.scenes) || [],
+      userPresets: cloneProjectData(state.userPresets) || [],
+      audio: cloneProjectData(state.audio),
+      flux: cloneProjectData(state.flux),
+      animation: cloneProjectData(state.animation),
+    },
+  }
+}
+
+function getProjectPayload(doc) {
+  if (doc?.type === 'lumenlab-project' && doc?.project) return doc.project
+  if (doc?.liveState || doc?.projection || doc?.scenes || doc?.mediaLibrary) return doc
+  return null
+}
+
+function createProjectionSurfaceSceneRecord(state, surfaceId, name = null) {
+  const targetSurface = (state.projection.surfaces || []).find((surface) => surface.id === surfaceId)
+  if (!targetSurface) return null
+
+  const sceneState = getProjectionSurfaceSceneState(targetSurface, {
+    liveState: createSceneStateSnapshot(state),
+    mediaLibrary: state.mediaLibrary,
+    scenes: state.scenes,
+    userPresets: state.userPresets,
+    builtinPresets: presets,
+  })
+
+  if (!sceneState) return null
+
+  const sceneId = `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`
+  return {
+    sceneId,
+    targetSurface,
+    nextScene: {
+      id: sceneId,
+      name: name || `${targetSurface.name} Scene`,
+      state: sceneState,
+    },
+  }
+}
+
+function createLiveProjectionSurface(surface) {
+  return {
+    ...surface,
+    sourceMode: 'live',
+    sourceId: 'live',
+  }
+}
+
+function resetProjectionSurfaceSources(surfaces = [], predicate = () => true) {
+  return surfaces.map((surface) => (
+    predicate(surface) ? createLiveProjectionSurface(surface) : surface
+  ))
+}
 
 const DEFAULTS = {
   schemaVersion: SCHEMA_VERSION,
   image: null,
+  media: null,
+  mediaLibrary: [],
+  activeMediaId: null,
   transforms: {
     x: 0,
     y: 0,
@@ -84,7 +219,32 @@ const DEFAULTS = {
     fit: 'contain',
     shape: 'rectangle',
   },
+  projection: {
+    enabled: false,
+    calibrating: false,
+    editingSurfaces: false,
+    surfaceEditMode: 'warp',
+    points: null,
+    selectedCorner: 0,
+    selectedMaskPoint: 0,
+    showTestPattern: true,
+    guideOpacity: 0.85,
+    nudgeStep: 1,
+    blackout: false,
+    patternMode: 'off',
+    patternType: 'grid',
+    profiles: [],
+    displayId: null,
+    outputWindowOpen: false,
+    selectedSurfaceId: null,
+    surfaces: [],
+  },
   snapshots: [],
+  scenes: [],
+  sceneEditor: {
+    activeSceneId: null,
+    originalLiveState: null,
+  },
   userPresets: [],
   animation: {
     isPlaying: false,
@@ -143,6 +303,68 @@ export const useStore = create(
 
       // --- Setters ---
       setImage: (img) => set({ image: img }),
+      setMedia: (media) => set((state) => ({
+        media,
+        activeMediaId: media?.id ?? (media ? state.activeMediaId : null),
+        image: null,
+      })),
+      addMediaAsset: (asset, options = {}) => set((state) => {
+        const activate = options.activate !== false
+        const nextLibrary = [
+          ...(state.mediaLibrary || []).filter((entry) => entry.id !== asset.id),
+          asset,
+        ]
+
+        return {
+          mediaLibrary: nextLibrary,
+          activeMediaId: activate ? asset.id : state.activeMediaId,
+          media: activate ? asset : state.media,
+          image: activate ? null : state.image,
+        }
+      }),
+      setActiveMediaAsset: (id) => set((state) => {
+        const asset = (state.mediaLibrary || []).find((entry) => String(entry.id) === String(id))
+        if (!asset) return {}
+
+        return {
+          activeMediaId: asset.id,
+          media: asset,
+          image: null,
+        }
+      }),
+      renameMediaAsset: (id, name) => set((state) => {
+        const mediaLibrary = (state.mediaLibrary || []).map((asset) => (
+          String(asset.id) === String(id) ? { ...asset, name } : asset
+        ))
+
+        const activeMedia = String(state.media?.id) === String(id)
+          ? { ...state.media, name }
+          : state.media
+
+        return {
+          mediaLibrary,
+          media: activeMedia,
+        }
+      }),
+      removeMediaAsset: (id) => set((state) => {
+        const mediaLibrary = (state.mediaLibrary || []).filter((asset) => String(asset.id) !== String(id))
+        const fallbackAsset = mediaLibrary[0] || null
+        const removeActive = String(state.activeMediaId) === String(id) || String(state.media?.id) === String(id)
+
+        return {
+          mediaLibrary,
+          activeMediaId: removeActive ? (fallbackAsset?.id ?? null) : state.activeMediaId,
+          media: removeActive ? fallbackAsset : state.media,
+          image: removeActive ? null : state.image,
+          projection: {
+            ...state.projection,
+            surfaces: resetProjectionSurfaceSources(
+              state.projection.surfaces || [],
+              (surface) => surface.sourceMode === 'media' && String(surface.sourceId) === String(id)
+            ),
+          },
+        }
+      }),
 
       setMidi: (key, value) => {
         set((state) => {
@@ -333,41 +555,309 @@ export const useStore = create(
         snapshots: state.snapshots.filter((_, i) => i !== index)
       })),
 
-      loadSnapshot: (snap) => set((state) => {
-        const lock = state.ui?.lockGeometry
-        return {
-          transforms: lock ? state.transforms : { ...snap.transforms },
-          symmetry: lock ? state.symmetry : { ...snap.symmetry },
-          warp: lock ? state.warp : { ...snap.warp },
-          displacement: { ...snap.displacement },
-          tiling: lock ? state.tiling : { ...snap.tiling },
-          color: { ...snap.color },
-          effects: { ...snap.effects },
-          generator: { ...snap.generator },
-        }
-      }),
+      loadSnapshot: (snap) => set((state) => applySceneStateSnapshot(state, snap)),
 
       saveUserPreset: (name) => set((state) => {
         const newPreset = {
           name,
           id: Date.now(),
-          state: {
-            transforms: { ...state.transforms },
-            symmetry: { ...state.symmetry },
-            warp: { ...state.warp },
-            displacement: { ...state.displacement },
-            tiling: { ...state.tiling },
-            color: { ...state.color },
-            effects: { ...state.effects },
-            generator: { ...state.generator },
-          }
+          state: createSceneStateSnapshot(state),
         }
         return { userPresets: [...(state.userPresets || []), newPreset] }
       }),
 
-      deleteUserPreset: (id) => set((state) => ({
-        userPresets: state.userPresets.filter((p) => p.id !== id)
+      exportProjectData: () => createProjectDocument(get()),
+
+      importProjectData: (doc) => set((state) => {
+        const project = getProjectPayload(doc)
+        if (!project) return {}
+
+        const liveState = project.liveState || {}
+        const nextProjection = {
+          ...DEFAULTS.projection,
+          ...createProjectProjectionState(project.projection),
+          calibrating: false,
+          editingSurfaces: false,
+          surfaceEditMode: DEFAULTS.projection.surfaceEditMode,
+          selectedCorner: 0,
+          selectedMaskPoint: 0,
+          outputWindowOpen: false,
+        }
+
+        return {
+          schemaVersion: SCHEMA_VERSION,
+          image: null,
+          media: liveState.media ? cloneProjectData(liveState.media) : null,
+          mediaLibrary: cloneProjectData(project.mediaLibrary) || [],
+          activeMediaId: liveState.activeMediaId ?? liveState.media?.id ?? null,
+          transforms: { ...DEFAULTS.transforms, ...(liveState.transforms || {}) },
+          symmetry: { ...DEFAULTS.symmetry, ...(liveState.symmetry || {}) },
+          warp: { ...DEFAULTS.warp, ...(liveState.warp || {}) },
+          displacement: { ...DEFAULTS.displacement, ...(liveState.displacement || {}) },
+          tiling: { ...DEFAULTS.tiling, ...(liveState.tiling || {}) },
+          generator: { ...DEFAULTS.generator, ...(liveState.generator || {}) },
+          color: { ...DEFAULTS.color, ...(liveState.color || {}) },
+          effects: { ...DEFAULTS.effects, ...(liveState.effects || {}) },
+          canvas: { ...DEFAULTS.canvas, ...(project.canvas || {}) },
+          projection: nextProjection,
+          snapshots: cloneProjectData(project.snapshots) || [],
+          scenes: cloneProjectData(project.scenes) || [],
+          sceneEditor: { ...DEFAULTS.sceneEditor },
+          userPresets: cloneProjectData(project.userPresets) || [],
+          animation: { ...DEFAULTS.animation, ...(project.animation || {}) },
+          flux: { ...DEFAULTS.flux, ...(project.flux || {}) },
+          audio: { ...DEFAULTS.audio, ...(project.audio || {}) },
+          recording: { ...DEFAULTS.recording },
+          undoStack: [],
+          redoStack: [],
+          ui: {
+            ...state.ui,
+            exportRequest: null,
+            resetNotice: null,
+          },
+        }
+      }),
+
+      saveScene: (name, options = {}) => set((state) => {
+        const sceneId = `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`
+        const newScene = {
+          id: sceneId,
+          name,
+          state: createSceneStateSnapshot(state),
+        }
+        const assignSelectedSurface = options.assignSelectedSurface !== false
+        const selectedSurfaceId = state.projection.selectedSurfaceId
+
+        return {
+          scenes: [...(state.scenes || []), newScene],
+          projection: assignSelectedSurface && selectedSurfaceId
+            ? {
+              ...state.projection,
+              surfaces: (state.projection.surfaces || []).map((surface) => (
+                surface.id === selectedSurfaceId
+                  ? { ...surface, sourceMode: 'scene', sourceId: sceneId }
+                  : surface
+              )),
+            }
+            : state.projection,
+        }
+      }),
+
+      captureProjectionSurfaceAsScene: (surfaceId = null, name = null) => set((state) => {
+        const targetSurfaceId = surfaceId || state.projection.selectedSurfaceId
+        const sceneRecord = createProjectionSurfaceSceneRecord(state, targetSurfaceId, name)
+        if (!sceneRecord) return {}
+
+        return {
+          scenes: [...(state.scenes || []), sceneRecord.nextScene],
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: targetSurfaceId,
+            surfaces: (state.projection.surfaces || []).map((surface) => (
+              surface.id === targetSurfaceId
+                ? { ...surface, sourceMode: 'scene', sourceId: sceneRecord.sceneId }
+                : surface
+            )),
+          },
+        }
+      }),
+
+      startProjectionSurfaceSceneEdit: (surfaceId = null, name = null) => set((state) => {
+        const targetSurfaceId = surfaceId || state.projection.selectedSurfaceId
+        const sceneRecord = createProjectionSurfaceSceneRecord(state, targetSurfaceId, name)
+        if (!sceneRecord) return {}
+
+        const originalLiveState = state.sceneEditor?.originalLiveState || createSceneStateSnapshot(state)
+
+        return {
+          ...applySceneStateSnapshot(state, sceneRecord.nextScene.state),
+          scenes: [...(state.scenes || []), sceneRecord.nextScene],
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: targetSurfaceId,
+            surfaces: (state.projection.surfaces || []).map((surface) => (
+              surface.id === targetSurfaceId
+                ? { ...surface, sourceMode: 'scene', sourceId: sceneRecord.sceneId }
+                : surface
+            )),
+          },
+          sceneEditor: {
+            activeSceneId: sceneRecord.sceneId,
+            originalLiveState,
+          },
+        }
+      }),
+
+      duplicateScene: (sceneId, options = {}) => set((state) => {
+        const sourceScene = (state.scenes || []).find((scene) => String(scene.id) === String(sceneId))
+        if (!sourceScene) return {}
+
+        const nextSceneId = `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`
+        const targetSurfaceId = options.surfaceId || state.projection.selectedSurfaceId || null
+        const assignSurface = options.assignSurface !== false && Boolean(targetSurfaceId)
+        const nextScene = {
+          ...cloneProjectData(sourceScene),
+          id: nextSceneId,
+          name: options.name || `${sourceScene.name} Copy`,
+        }
+
+        return {
+          scenes: [...(state.scenes || []), nextScene],
+          projection: assignSurface
+            ? {
+              ...state.projection,
+              selectedSurfaceId: targetSurfaceId,
+              surfaces: (state.projection.surfaces || []).map((surface) => (
+                surface.id === targetSurfaceId
+                  ? { ...surface, sourceMode: 'scene', sourceId: nextSceneId }
+                  : surface
+              )),
+            }
+            : state.projection,
+        }
+      }),
+
+      updateScene: (id, patch) => set((state) => ({
+        scenes: (state.scenes || []).map((scene) => (
+          String(scene.id) === String(id) ? { ...scene, ...patch } : scene
+        )),
       })),
+
+      captureSceneState: (id) => set((state) => ({
+        scenes: (state.scenes || []).map((scene) => (
+          String(scene.id) === String(id)
+            ? { ...scene, state: createSceneStateSnapshot(state) }
+            : scene
+        )),
+      })),
+
+      loadSceneToLive: (id) => set((state) => {
+        const scene = (state.scenes || []).find((entry) => String(entry.id) === String(id))
+        if (!scene?.state) return {}
+
+        return applySceneStateSnapshot(state, scene.state)
+      }),
+
+      startSceneEdit: (id) => set((state) => {
+        const scene = (state.scenes || []).find((entry) => String(entry.id) === String(id))
+        if (!scene?.state) return {}
+
+        const originalLiveState = state.sceneEditor?.originalLiveState || createSceneStateSnapshot(state)
+
+        return {
+          ...applySceneStateSnapshot(state, scene.state),
+          sceneEditor: {
+            activeSceneId: scene.id,
+            originalLiveState,
+          },
+        }
+      }),
+
+      stopSceneEdit: (options = {}) => set((state) => {
+        const activeSceneId = state.sceneEditor?.activeSceneId
+        if (!activeSceneId) return {}
+
+        const restoreLive = options.restoreLive !== false
+        const originalLiveState = state.sceneEditor?.originalLiveState
+        const nextState = restoreLive && originalLiveState
+          ? applySceneStateSnapshot(state, originalLiveState)
+          : {}
+
+        return {
+          ...nextState,
+          sceneEditor: {
+            activeSceneId: null,
+            originalLiveState: null,
+          },
+        }
+      }),
+
+      deleteScene: (id) => set((state) => ({
+        scenes: (state.scenes || []).filter((scene) => String(scene.id) !== String(id)),
+        sceneEditor: state.sceneEditor?.activeSceneId && String(state.sceneEditor.activeSceneId) === String(id)
+          ? {
+            activeSceneId: null,
+            originalLiveState: null,
+          }
+          : state.sceneEditor,
+        projection: {
+          ...state.projection,
+          surfaces: resetProjectionSurfaceSources(
+            state.projection.surfaces || [],
+            (surface) => surface.sourceMode === 'scene' && String(surface.sourceId) === String(id)
+          ),
+        },
+      })),
+
+      assignSceneToSurface: (sceneId, surfaceId = null) => set((state) => {
+        const targetScene = (state.scenes || []).find((scene) => String(scene.id) === String(sceneId))
+        const targetSurfaceId = surfaceId || state.projection.selectedSurfaceId
+        if (!targetScene || !targetSurfaceId) return {}
+
+        return {
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: targetSurfaceId,
+            surfaces: (state.projection.surfaces || []).map((surface) => (
+              surface.id === targetSurfaceId
+                ? { ...surface, sourceMode: 'scene', sourceId: targetScene.id }
+                : surface
+            )),
+          },
+        }
+      }),
+
+      deleteUserPreset: (id) => set((state) => ({
+        userPresets: state.userPresets.filter((p) => p.id !== id),
+        projection: {
+          ...state.projection,
+          surfaces: resetProjectionSurfaceSources(
+            state.projection.surfaces || [],
+            (surface) => surface.sourceMode === 'user' && String(surface.sourceId) === String(id)
+          ),
+        },
+      })),
+
+      setProjectionSurfacesLive: (surfaceIds = null) => set((state) => {
+        const targetIds = Array.isArray(surfaceIds) && surfaceIds.length > 0
+          ? new Set(surfaceIds.map((id) => String(id)))
+          : null
+
+        return {
+          projection: {
+            ...state.projection,
+            surfaces: resetProjectionSurfaceSources(
+              state.projection.surfaces || [],
+              (surface) => !targetIds || targetIds.has(String(surface.id))
+            ),
+          },
+        }
+      }),
+
+      resetInvalidProjectionSurfaceSources: (surfaceIds = null) => set((state) => {
+        const targetIds = Array.isArray(surfaceIds) && surfaceIds.length > 0
+          ? new Set(surfaceIds.map((id) => String(id)))
+          : null
+        const sourceOptions = {
+          mediaLibrary: state.mediaLibrary,
+          scenes: state.scenes,
+          userPresets: state.userPresets,
+          builtinPresets: presets,
+        }
+
+        return {
+          projection: {
+            ...state.projection,
+            surfaces: resetProjectionSurfaceSources(
+              state.projection.surfaces || [],
+              (surface) => {
+                if (targetIds && !targetIds.has(String(surface.id))) return false
+                return !getProjectionSurfaceSourceMeta(surface, sourceOptions).isValid
+              }
+            ),
+          },
+        }
+      }),
 
       setAnimation: (key, value) => set((state) => ({
         animation: { ...state.animation, [key]: value }
@@ -413,6 +903,267 @@ export const useStore = create(
 
       setCanvas: (key, value) => set((state) => ({
         canvas: { ...state.canvas, [key]: value }
+      })),
+
+      setProjection: (key, value) => set((state) => {
+        const projection = { ...state.projection, [key]: value }
+        if (key === 'enabled' && value === false) {
+          projection.calibrating = false
+        }
+        if (key === 'calibrating' && value === true) {
+          projection.enabled = true
+        }
+        return { projection }
+      }),
+
+      setProjectionPoint: (index, point) => set((state) => {
+        const points = Array.isArray(state.projection.points)
+          ? [...state.projection.points]
+          : null
+
+        if (!points || !points[index]) return {}
+
+        points[index] = point
+        return {
+          projection: {
+            ...state.projection,
+            points,
+          }
+        }
+      }),
+
+      setProjectionPoints: (points) => set((state) => ({
+        projection: {
+          ...state.projection,
+          points,
+        }
+      })),
+
+      addProjectionSurface: (name = null) => set((state) => {
+        const nextId = `surface-${Date.now()}-${Math.round(Math.random() * 1000)}`
+        const nextIndex = (state.projection.surfaces?.length || 0) + 1
+        const nextSurface = {
+          id: nextId,
+          name: name || `Surface ${nextIndex}`,
+          visible: true,
+          opacity: 1,
+          blendMode: 'screen',
+          sourceMode: 'live',
+          sourceId: 'live',
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 1, y: 1 },
+            { x: 0, y: 1 },
+          ],
+          maskPoints: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 1, y: 1 },
+            { x: 0, y: 1 },
+          ],
+        }
+
+        return {
+          projection: {
+            ...state.projection,
+            enabled: true,
+            editingSurfaces: true,
+            surfaceEditMode: 'warp',
+            selectedMaskPoint: 0,
+            selectedSurfaceId: nextId,
+            surfaces: [...(state.projection.surfaces || []), nextSurface],
+          }
+        }
+      }),
+
+      updateProjectionSurface: (id, patch) => set((state) => ({
+        projection: {
+          ...state.projection,
+          surfaces: (state.projection.surfaces || []).map((surface) => (
+            surface.id === id ? { ...surface, ...patch } : surface
+          )),
+        }
+      })),
+
+      setProjectionSurfacePoints: (id, points) => set((state) => ({
+        projection: {
+          ...state.projection,
+          surfaces: (state.projection.surfaces || []).map((surface) => (
+            surface.id === id ? { ...surface, points } : surface
+          )),
+        }
+      })),
+
+      duplicateProjectionSurface: (id) => set((state) => {
+        const sourceSurface = (state.projection.surfaces || []).find((surface) => surface.id === id)
+        if (!sourceSurface) return {}
+
+        const nextId = `surface-${Date.now()}-${Math.round(Math.random() * 1000)}`
+        const duplicatedSurface = {
+          ...sourceSurface,
+          id: nextId,
+          name: `${sourceSurface.name} Copy`,
+          points: sourceSurface.points.map((point) => ({
+            x: Math.min(1, point.x + 0.02),
+            y: Math.min(1, point.y + 0.02),
+          })),
+          maskPoints: (sourceSurface.maskPoints || []).map((point) => ({ ...point })),
+        }
+
+        return {
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: nextId,
+            surfaces: [...(state.projection.surfaces || []), duplicatedSurface],
+          }
+        }
+      }),
+
+      removeProjectionSurface: (id) => set((state) => {
+        const remainingSurfaces = (state.projection.surfaces || []).filter((surface) => surface.id !== id)
+        return {
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: remainingSurfaces[0]?.id || null,
+            surfaces: remainingSurfaces,
+          }
+        }
+      }),
+
+      setProjectionSurfaceMaskPoints: (id, maskPoints) => set((state) => ({
+        projection: {
+          ...state.projection,
+          surfaces: (state.projection.surfaces || []).map((surface) => (
+            surface.id === id ? { ...surface, maskPoints } : surface
+          )),
+        }
+      })),
+
+      addProjectionSurfaceMaskPoint: (id, insertAfterIndex = 0) => set((state) => {
+        const surfaces = state.projection.surfaces || []
+        const targetSurface = surfaces.find((surface) => surface.id === id)
+        if (!targetSurface) return {}
+
+        const currentMask = targetSurface.maskPoints || []
+        if (currentMask.length < 2) return {}
+
+        const nextIndex = (insertAfterIndex + 1) % currentMask.length
+        const currentPoint = currentMask[insertAfterIndex]
+        const nextPoint = currentMask[nextIndex]
+        const insertedPoint = {
+          x: (currentPoint.x + nextPoint.x) / 2,
+          y: (currentPoint.y + nextPoint.y) / 2,
+        }
+
+        const nextMask = [
+          ...currentMask.slice(0, insertAfterIndex + 1),
+          insertedPoint,
+          ...currentMask.slice(insertAfterIndex + 1),
+        ]
+
+        return {
+          projection: {
+            ...state.projection,
+            selectedMaskPoint: insertAfterIndex + 1,
+            surfaces: surfaces.map((surface) => (
+              surface.id === id ? { ...surface, maskPoints: nextMask } : surface
+            )),
+          }
+        }
+      }),
+
+      removeProjectionSurfaceMaskPoint: (id, pointIndex) => set((state) => {
+        const surfaces = state.projection.surfaces || []
+        const targetSurface = surfaces.find((surface) => surface.id === id)
+        if (!targetSurface || !targetSurface.maskPoints || targetSurface.maskPoints.length <= 3) return {}
+
+        const nextMask = targetSurface.maskPoints.filter((_, index) => index !== pointIndex)
+        return {
+          projection: {
+            ...state.projection,
+            selectedMaskPoint: Math.max(0, Math.min(state.projection.selectedMaskPoint, nextMask.length - 1)),
+            surfaces: surfaces.map((surface) => (
+              surface.id === id ? { ...surface, maskPoints: nextMask } : surface
+            )),
+          }
+        }
+      }),
+
+      resetProjectionSurfaceMask: (id) => set((state) => ({
+        projection: {
+          ...state.projection,
+          selectedMaskPoint: 0,
+          surfaces: (state.projection.surfaces || []).map((surface) => (
+            surface.id === id
+              ? {
+                ...surface,
+                maskPoints: [
+                  { x: 0, y: 0 },
+                  { x: 1, y: 0 },
+                  { x: 1, y: 1 },
+                  { x: 0, y: 1 },
+                ],
+              }
+              : surface
+          )),
+        }
+      })),
+
+      resetProjection: () => set((state) => ({
+        projection: {
+          ...state.projection,
+          points: null,
+          selectedCorner: 0,
+          selectedMaskPoint: 0,
+          selectedSurfaceId: state.projection.surfaces?.[0]?.id || null,
+        }
+      })),
+
+      saveProjectionProfile: (name) => set((state) => {
+        const points = Array.isArray(state.projection.points)
+          ? state.projection.points.map((point) => ({ ...point }))
+          : null
+
+        if (!points) return {}
+
+        const profile = {
+          id: Date.now(),
+          name,
+          points,
+          patternMode: state.projection.patternMode,
+          patternType: state.projection.patternType,
+        }
+
+        return {
+          projection: {
+            ...state.projection,
+            profiles: [...(state.projection.profiles || []), profile],
+          }
+        }
+      }),
+
+      applyProjectionProfile: (id) => set((state) => {
+        const profile = (state.projection.profiles || []).find((entry) => entry.id === id)
+        if (!profile) return {}
+
+        return {
+          projection: {
+            ...state.projection,
+            enabled: true,
+            points: profile.points.map((point) => ({ ...point })),
+            patternMode: profile.patternMode || 'off',
+            patternType: profile.patternType || 'grid',
+            selectedCorner: 0,
+          }
+        }
+      }),
+
+      deleteProjectionProfile: (id) => set((state) => ({
+        projection: {
+          ...state.projection,
+          profiles: (state.projection.profiles || []).filter((entry) => entry.id !== id),
+        }
       })),
 
       setFlux: (key, value) => set((state) => ({
@@ -514,6 +1265,9 @@ export const useStore = create(
       }),
       partialize: (state) => ({
         schemaVersion: state.schemaVersion,
+        media: state.media,
+        mediaLibrary: state.mediaLibrary,
+        activeMediaId: state.activeMediaId,
         transforms: state.transforms,
         symmetry: state.symmetry,
         warp: state.warp,
@@ -523,7 +1277,9 @@ export const useStore = create(
         color: state.color,
         effects: state.effects,
         canvas: state.canvas,
+        projection: state.projection,
         snapshots: state.snapshots,
+        scenes: state.scenes,
         userPresets: state.userPresets,
         audio: state.audio,
         flux: state.flux,
@@ -546,6 +1302,9 @@ export const useStore = create(
           ...currentState,
           ...persistedState,
           schemaVersion: SCHEMA_VERSION,
+          media: persistedState?.media || currentState.media,
+          mediaLibrary: persistedState?.mediaLibrary || currentState.mediaLibrary,
+          activeMediaId: persistedState?.activeMediaId ?? currentState.activeMediaId,
           // Deep merge config objects to ensure new keys appear if schema changes
           effects: { ...currentState.effects, ...(persistedState?.effects || {}) },
           audio: { ...currentState.audio, ...(persistedState?.audio || {}) },
@@ -553,9 +1312,11 @@ export const useStore = create(
           ui: { ...currentState.ui, ...(persistedState?.ui || {}) },
           midi: { ...currentState.midi, ...(persistedState?.midi || {}) },
           animation: { ...currentState.animation, ...(persistedState?.animation || {}) },
+          scenes: persistedState?.scenes || currentState.scenes,
           symmetry: { ...currentState.symmetry, ...(persistedState?.symmetry || {}) },
           generator: { ...currentState.generator, ...(persistedState?.generator || {}) },
           color: { ...currentState.color, ...(persistedState?.color || {}) },
+          projection: { ...currentState.projection, ...(persistedState?.projection || {}) },
         }
       },
     }

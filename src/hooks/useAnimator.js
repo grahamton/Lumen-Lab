@@ -75,7 +75,7 @@ export const interpolateState = (s1, s2, t, out) => {
   return o
 }
 
-export function useAnimator() {
+export function useAnimator(enabled = true) {
   const { snapshots, animation, loadSnapshot, setAnimation } = useStore()
   const requestRef = useRef()
   const startTimeRef = useRef()
@@ -194,7 +194,8 @@ export function useAnimator() {
   }, [animation, snapshots, easings, loadSnapshot, setAnimation])
 
   useEffect(() => {
+    if (!enabled) return undefined
     requestRef.current = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(requestRef.current)
-  }, [animate])
+  }, [animate, enabled])
 }

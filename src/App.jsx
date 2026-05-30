@@ -3,18 +3,44 @@ import { ControlsShell } from './components/controls/ControlsShell'
 import { HelpModal } from './components/HelpModal'
 import { useAnimator } from './hooks/useAnimator'
 import { useGamepad } from './hooks/useGamepad'
+import { useProjectionStateBridge } from './hooks/useProjectionStateBridge'
+import { presets } from './presets'
 import { useStore } from './store/useStore'
+import { hasRenderableProjectionSurface } from './utils/projectionSources'
+import { isProjectionWindow } from './utils/windowMode'
 import { midiManager } from './core/MidiManager'
 
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 const LazyCanvas = lazy(() => import('./components/CanvasGL').then(mod => ({ default: mod.CanvasGL })))
+const PROJECTION_PATTERN_MODES = ['off', 'overlay', 'replace']
+const PROJECTION_PATTERN_TYPES = ['grid', 'crosshair', 'checker']
+const projectionWindowMode = isProjectionWindow()
 
 function App() {
-  useAnimator() // Hook for physics/animation loop (updates store)
-  useGamepad() // Hook for Xbox controller input
+  useAnimator(!projectionWindowMode) // Hook for physics/animation loop (updates store)
+  useGamepad(!projectionWindowMode) // Hook for Xbox controller input
+  useProjectionStateBridge(projectionWindowMode)
+  const hasVisualSource = useStore((state) => (
+    state.media ||
+    (state.generator?.type && state.generator.type !== 'none') ||
+    hasRenderableProjectionSurface(state.projection, {
+      mediaLibrary: state.mediaLibrary,
+      scenes: state.scenes,
+      userPresets: state.userPresets,
+      builtinPresetCount: presets.length,
+    }) ||
+    state.projection?.blackout ||
+    (state.projection?.patternMode && state.projection.patternMode !== 'off')
+  ))
+  const controlsOpen = useStore((state) => state.ui.controlsOpen)
+  const recordingIsActive = useStore((state) => state.recording.isActive)
 
   useEffect(() => {
+    if (projectionWindowMode) {
+      return undefined
+    }
+
     const state = useStore.getState()
 
     // Startup Preference Check
@@ -56,6 +82,27 @@ function App() {
         case 'h':
           store.toggleControls(!store.ui.controlsOpen)
           break
+        case 'b':
+          store.setProjection('blackout', !store.projection?.blackout)
+          break
+        case 'escape':
+          if (store.projection?.calibrating) {
+            store.setProjection('calibrating', false)
+          }
+          break
+        case 'p': {
+          if (e.shiftKey) {
+            const currentPatternType = store.projection?.patternType || 'grid'
+            const typeIndex = PROJECTION_PATTERN_TYPES.indexOf(currentPatternType)
+            store.setProjection('patternType', PROJECTION_PATTERN_TYPES[(typeIndex + 1) % PROJECTION_PATTERN_TYPES.length])
+            break
+          }
+
+          const currentPatternMode = store.projection?.patternMode || 'off'
+          const modeIndex = PROJECTION_PATTERN_MODES.indexOf(currentPatternMode)
+          store.setProjection('patternMode', PROJECTION_PATTERN_MODES[(modeIndex + 1) % PROJECTION_PATTERN_MODES.length])
+          break
+        }
         case 's':
           store.addSnapshot()
           // Visual feedback could be added here
@@ -87,11 +134,13 @@ function App() {
           <LazyCanvas />
         </Suspense>
       </ErrorBoundary>
-      <ErrorBoundary fallback={<div className="absolute left-0 top-0 h-full w-64 flex items-center justify-center text-red-500 font-mono text-xs bg-neutral-900">Panel Error</div>}>
-        <ControlsShell />
-      </ErrorBoundary>
+      {!projectionWindowMode && (
+        <ErrorBoundary fallback={<div className="absolute left-0 top-0 h-full w-64 flex items-center justify-center text-red-500 font-mono text-xs bg-neutral-900">Panel Error</div>}>
+          <ControlsShell />
+        </ErrorBoundary>
+      )}
       {/* Blank state helper */}
-      {!useStore((state) => state.image || (state.generator?.type && state.generator.type !== 'none')) && (
+      {!projectionWindowMode && !hasVisualSource && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="bg-black/60 border border-white/10 rounded-xl px-6 py-4 text-center max-w-xs">
             <div className="text-sm font-semibold text-white mb-1">Start creating</div>
@@ -100,7 +149,7 @@ function App() {
         </div>
       )}
       {/* Floating Toggle Button (Visible when UI hidden) */}
-      {!useStore((state) => state.ui.controlsOpen) && (
+      {!projectionWindowMode && !controlsOpen && (
         <button
           onClick={() => useStore.getState().toggleControls(true)}
           title="Show panel (H)"
@@ -111,14 +160,14 @@ function App() {
       )}
 
       {/* Recording Indicator */}
-      {useStore((state) => state.recording.isActive) && (
+      {!projectionWindowMode && recordingIsActive && (
         <div className="fixed top-4 right-4 z-50 flex items-center gap-2 pointer-events-none animate-pulse">
           <div className="w-3 h-3 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
           <span className="text-red-500 font-bold font-mono text-xs tracking-widest uppercase">REC</span>
         </div>
       )}
 
-      <HelpModal />
+      {!projectionWindowMode && <HelpModal />}
     </div>
   )
 }

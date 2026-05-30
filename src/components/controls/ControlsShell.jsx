@@ -7,10 +7,12 @@ import { SectionGeometry } from './SectionGeometry'
 import { SectionColor } from './SectionColor'
 import { SectionEffects } from './SectionEffects'
 import { SectionMotion } from './SectionMotion'
+import { SectionOutput } from './SectionOutput'
 import { SectionPresets } from './SectionPresets'
 
 const SECTIONS = [
   { id: 'geometry', title: 'GEOMETRY',  Component: SectionGeometry },
+  { id: 'output',   title: 'OUTPUT',    Component: SectionOutput   },
   { id: 'color',    title: 'COLOR',     Component: SectionColor    },
   { id: 'effects',  title: 'EFFECTS',   Component: SectionEffects  },
   { id: 'motion',   title: 'MOTION',    Component: SectionMotion   },
@@ -102,16 +104,16 @@ export function ControlsShell({ className = '' }) {
 
       {/* Collapsible sections */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {SECTIONS.map(({ id, title, Component }) => (
+        {SECTIONS.map((section) => (
           <CollapsibleSection
-            key={id}
-            id={id}
-            title={title}
-            isOpen={openSections.has(id)}
-            isActive={activeSection === id}
+            key={section.id}
+            id={section.id}
+            title={section.title}
+            isOpen={openSections.has(section.id)}
+            isActive={activeSection === section.id}
             onToggle={handleToggle}
           >
-            <Component onInteract={() => handleInteract(id)} />
+            <section.Component onInteract={() => handleInteract(section.id)} />
           </CollapsibleSection>
         ))}
       </div>

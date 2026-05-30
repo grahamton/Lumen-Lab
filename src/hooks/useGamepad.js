@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from '../store/useStore'
 
-export function useGamepad() {
+export function useGamepad(enabled = true) {
   const requestRef = useRef()
   // We do NOT call useStore() here to avoid subscribing the component (App) to every state change.
   // We will access the store transiently via useStore.getState() inside the loop.
@@ -14,6 +14,7 @@ export function useGamepad() {
   const POLL_RATE = 16 // ~60fps
 
   useEffect(() => {
+    if (!enabled) return undefined
     const scanGamepads = () => {
       const store = useStore.getState()
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : []
@@ -113,7 +114,7 @@ export function useGamepad() {
 
     requestRef.current = requestAnimationFrame(scanGamepads)
     return () => cancelAnimationFrame(requestRef.current)
-  }, []) // Dependencies should be stable
+  }, [enabled]) // Dependencies should be stable
 }
 
 function handleButtonPress(index, store) {

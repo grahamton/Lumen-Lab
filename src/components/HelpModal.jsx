@@ -62,6 +62,7 @@ export function HelpModal() {
             </div>
             <ul className="list-disc list-inside text-sm text-neutral-300 space-y-1 ml-1">
               <li><strong className="text-white">Virtual Canvas:</strong> Set aspect ratio to 16:9 for standard projectors.</li>
+              <li><strong className="text-white">Projection Mapping:</strong> Open the <strong>Output</strong> section to enable four-corner warp, then drag the calibration handles onto your surface.</li>
               <li><strong className="text-white">4K Export:</strong> Downloads high-res PNG for printing.</li>
             </ul>
           </section>
@@ -149,7 +150,9 @@ export function HelpModal() {
                 </div>
                 <p className="text-xs text-neutral-400">
                   <strong>TAB:</strong> Hide UI • <strong>F:</strong> Fullscreen<br />
-                  <strong>S:</strong> Snapshot • <strong>R:</strong> Record
+                  <strong>S:</strong> Snapshot • <strong>R:</strong> Record • <strong>Esc:</strong> Exit calibration<br />
+                  <strong>1-4:</strong> Select corner • <strong>Arrows:</strong> Nudge corner<br />
+                  <strong>B:</strong> Blackout • <strong>P:</strong> Cycle pattern • <strong>Shift+P:</strong> Cycle pattern type
                 </p>
               </div>
             </div>
