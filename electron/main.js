@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 let mainWindow = null
 let projectionWindow = null
+let projectionWindowDisplayId = null
 
 // Force High-Performance GPU
 app.commandLine.appendSwitch('force_high_performance_gpu')
@@ -17,7 +18,8 @@ function loadRenderer(win, query = {}) {
   if (app.isPackaged) {
     win.loadFile(path.join(__dirname, '../dist/index.html'), { query })
   } else {
-    const url = new URL('http://localhost:5173')
+    const devPort = process.env.VITE_DEV_PORT || '5173'
+    const url = new URL(`http://localhost:${devPort}`)
     Object.entries(query).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
         url.searchParams.set(key, String(value))
@@ -25,6 +27,24 @@ function loadRenderer(win, query = {}) {
     })
     win.loadURL(url.toString())
   }
+}
+
+function getProjectionDisplay(displayId = null) {
+  const displays = screen.getAllDisplays()
+  return displays.find((display) => display.id === displayId) || screen.getPrimaryDisplay()
+}
+
+function applyProjectionWindowDisplay(displayId = null) {
+  const win = projectionWindow
+  if (!win || win.isDestroyed()) return null
+
+  const targetDisplay = getProjectionDisplay(displayId)
+  const { bounds } = targetDisplay
+  projectionWindowDisplayId = targetDisplay.id
+
+  win.setBounds(bounds)
+  win.setFullScreen(true)
+  return targetDisplay
 }
 
 function createWindow() {
@@ -43,13 +63,11 @@ function createWindow() {
 }
 
 function createProjectionWindow(displayId = null) {
-  const displays = screen.getAllDisplays()
-  const targetDisplay = displays.find((display) => display.id === displayId) || screen.getPrimaryDisplay()
+  const targetDisplay = getProjectionDisplay(displayId)
   const { bounds } = targetDisplay
 
   if (projectionWindow && !projectionWindow.isDestroyed()) {
-    projectionWindow.setBounds(bounds)
-    projectionWindow.setFullScreen(true)
+    applyProjectionWindowDisplay(displayId)
     projectionWindow.focus()
     return projectionWindow
   }
@@ -69,8 +87,8 @@ function createProjectionWindow(displayId = null) {
     }
   })
 
-  projectionWindow.setBounds(bounds)
-  projectionWindow.setFullScreen(true)
+  projectionWindowDisplayId = targetDisplay.id
+  applyProjectionWindowDisplay(targetDisplay.id)
   loadRenderer(projectionWindow, { projection: '1' })
 
   projectionWindow.on('closed', () => {
@@ -81,6 +99,11 @@ function createProjectionWindow(displayId = null) {
   })
 
   return projectionWindow
+}
+
+function syncProjectionWindowToDisplay() {
+  if (!projectionWindow || projectionWindow.isDestroyed()) return
+  applyProjectionWindowDisplay(projectionWindowDisplayId)
 }
 
 function registerProjectionIpc() {
@@ -104,6 +127,10 @@ function registerProjectionIpc() {
     }
     return true
   })
+
+  screen.on('display-added', syncProjectionWindowToDisplay)
+  screen.on('display-removed', syncProjectionWindowToDisplay)
+  screen.on('display-metrics-changed', syncProjectionWindowToDisplay)
 }
 
 app.whenReady().then(() => {
@@ -119,4 +146,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  projectionWindowDisplayId = null
 })
