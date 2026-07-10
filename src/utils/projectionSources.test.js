@@ -146,6 +146,33 @@ describe('projectionSources', () => {
     })
   })
 
+  it('prefers active draft state for the scene being authored', () => {
+    const definition = getProjectionSurfaceSourceDefinition(
+      { visible: true, sourceMode: 'scene', sourceId: 'scene-1' },
+      {
+        scenes: [{
+          id: 'scene-1',
+          name: 'Scene 1',
+          state: {
+            generator: { type: 'plasma', param1: 20, param2: 80, param3: 50 },
+            media: null,
+            activeMediaId: null,
+          },
+        }],
+        activeSceneId: 'scene-1',
+        activeSceneDraftState: {
+          generator: { type: 'voronoi', param1: 10, param2: 20, param3: 30 },
+          media: null,
+          activeMediaId: null,
+        },
+      }
+    )
+
+    expect(definition.stateOverride).toMatchObject({
+      generator: { type: 'voronoi', param1: 10, param2: 20, param3: 30 },
+    })
+  })
+
   it('resolves surface sources into scene-ready state snapshots', () => {
     expect(getProjectionSurfaceSceneState(
       { visible: true, sourceMode: 'live', sourceId: 'live' },

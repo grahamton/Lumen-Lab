@@ -86,7 +86,7 @@ export function SectionPresets({ onInteract }) {
         </button>
       </div>
       <div className="mt-2 rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-2 text-[9px] leading-relaxed text-neutral-500">
-        Project files save the live composition, media bin, scenes, user presets, and projection layout together.
+        Project files now separate layout, reusable sources, and look presets explicitly, while keeping the live composition as its own boundary for compatibility.
       </div>
       <div className="flex gap-2 mt-2">
         <button

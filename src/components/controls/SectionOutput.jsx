@@ -3,6 +3,14 @@ import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { presets } from '../../presets'
 import {
+  getActiveAuthoredSceneDraftState,
+  getActiveAuthoredSceneId,
+  getActiveSceneEditorHasLocalEdits,
+  getActiveSceneEditorMode,
+  getActiveSceneEditorSourceSurfaceName,
+} from '../../store/useStore'
+import {
+  getDraftAwareSceneState,
   getProjectionSurfaceSourceMeta,
   getRenderableProjectionSurfaces,
   getVisibleProjectionSurfaces,
@@ -33,6 +41,30 @@ const SURFACE_EDIT_MODES = [
   { value: 'mask', label: 'MASK' },
 ]
 
+function getSceneOriginLabel(scene) {
+  const originType = scene?.origin?.type
+  const originLabel = scene?.origin?.label
+
+  if (originLabel) return originLabel.toUpperCase()
+  if (originType === 'live') return 'LIVE OUTPUT'
+  if (originType === 'scene') return 'SCENE FORK'
+  if (originType === 'media') return 'MEDIA SHORTCUT'
+  if (originType === 'builtin') return 'BUILT-IN SHORTCUT'
+  if (originType === 'user') return 'USER PRESET SHORTCUT'
+  return 'SOURCE UNKNOWN'
+}
+
+function getSceneContentLabel(scene, activeSceneId = null, activeSceneDraftState = null) {
+  const sceneState = getDraftAwareSceneState(scene, {
+    activeSceneId,
+    activeSceneDraftState,
+  })
+
+  return sceneState?.media?.name
+    ? `MEDIA · ${sceneState.media.name.toUpperCase()}`
+    : `GENERATOR · ${(sceneState?.generator?.type || 'none').toUpperCase()}`
+}
+
 function Toggle({ label, value, onChange }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
@@ -60,11 +92,15 @@ export function SectionOutput({ onInteract }) {
     mediaLibrary,
     projection,
     scenes,
-    sceneEditor,
+    activeSceneId,
+    activeSceneDraftState,
+    activeSceneEditorMode,
+    activeSceneEditorSourceSurfaceName,
+    activeSceneEditorHasLocalEdits,
     userPresets,
     saveScene,
     captureProjectionSurfaceAsScene,
-    startProjectionSurfaceSceneEdit,
+    authorProjectionSurfaceScene,
     duplicateScene,
     updateScene,
     captureSceneState,
@@ -73,6 +109,7 @@ export function SectionOutput({ onInteract }) {
     stopSceneEdit,
     deleteScene,
     assignSceneToSurface,
+    assignProjectionSurfaceSource,
     setActiveMediaAsset,
     setProjection,
     resetProjection,
@@ -95,11 +132,15 @@ export function SectionOutput({ onInteract }) {
       mediaLibrary: state.mediaLibrary,
       projection: state.projection,
       scenes: state.scenes,
-      sceneEditor: state.sceneEditor,
+      activeSceneId: getActiveAuthoredSceneId(state),
+      activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
+      activeSceneEditorMode: getActiveSceneEditorMode(state),
+      activeSceneEditorSourceSurfaceName: getActiveSceneEditorSourceSurfaceName(state),
+      activeSceneEditorHasLocalEdits: getActiveSceneEditorHasLocalEdits(state),
       userPresets: state.userPresets,
       saveScene: state.saveScene,
       captureProjectionSurfaceAsScene: state.captureProjectionSurfaceAsScene,
-      startProjectionSurfaceSceneEdit: state.startProjectionSurfaceSceneEdit,
+      authorProjectionSurfaceScene: state.authorProjectionSurfaceScene,
       duplicateScene: state.duplicateScene,
       updateScene: state.updateScene,
       captureSceneState: state.captureSceneState,
@@ -108,6 +149,7 @@ export function SectionOutput({ onInteract }) {
       stopSceneEdit: state.stopSceneEdit,
       deleteScene: state.deleteScene,
       assignSceneToSurface: state.assignSceneToSurface,
+      assignProjectionSurfaceSource: state.assignProjectionSurfaceSource,
       setActiveMediaAsset: state.setActiveMediaAsset,
       setProjection: state.setProjection,
       resetProjection: state.resetProjection,
@@ -150,10 +192,10 @@ export function SectionOutput({ onInteract }) {
   const hasMixedStageState = liveSurfaceCount > 0 && independentSurfaceCount > 0
   const sourceOptions = [
     { value: 'live:live', label: 'LIVE OUTPUT' },
-    ...(mediaLibrary || []).map((asset) => ({ value: `media:${asset.id}`, label: `MEDIA · ${asset.name}` })),
+    ...(mediaLibrary || []).map((asset) => ({ value: `media:${asset.id}`, label: `NEW SCENE FROM MEDIA · ${asset.name}` })),
     ...(scenes || []).map((scene) => ({ value: `scene:${scene.id}`, label: `SCENE · ${scene.name}` })),
-    ...presets.map((preset, index) => ({ value: `builtin:${index}`, label: `BUILT-IN · ${preset.name}` })),
-    ...(userPresets || []).map((preset) => ({ value: `user:${preset.id}`, label: `USER · ${preset.name}` })),
+    ...presets.map((preset, index) => ({ value: `builtin:${index}`, label: `NEW SCENE FROM BUILT-IN · ${preset.name}` })),
+    ...(userPresets || []).map((preset) => ({ value: `user:${preset.id}`, label: `NEW SCENE FROM USER · ${preset.name}` })),
   ]
   const selectedSurfaceAssignedScene = selectedSurface?.sourceMode === 'scene'
     ? (scenes || []).find((scene) => String(scene.id) === String(selectedSurface.sourceId)) || null
@@ -169,8 +211,9 @@ export function SectionOutput({ onInteract }) {
   const selectedSceneUsageCount = selectedSurfaceAssignedScene
     ? sceneUsageCountById.get(selectedSurfaceAssignedScene.id) || 0
     : 0
-  const activeEditedScene = sceneEditor?.activeSceneId
-    ? (scenes || []).find((scene) => String(scene.id) === String(sceneEditor.activeSceneId)) || null
+  const selectedSurfaceSceneIsShared = selectedSceneUsageCount > 1
+  const activeEditedScene = activeSceneId
+    ? (scenes || []).find((scene) => String(scene.id) === String(activeSceneId)) || null
     : null
 
   function wrap(fn) {
@@ -343,7 +386,13 @@ export function SectionOutput({ onInteract }) {
           <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">OUTPUT DISPLAY</p>
           <select
             value={projection.displayId ?? ''}
-            onChange={wrap((event) => setProjection('displayId', Number(event.target.value)))}
+            onChange={wrap(async (event) => {
+              const nextDisplayId = Number(event.target.value)
+              setProjection('displayId', nextDisplayId)
+              if (projection.outputWindowOpen && window.electronAPI?.openProjectionWindow) {
+                await window.electronAPI.openProjectionWindow(nextDisplayId)
+              }
+            })}
             className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.16em] text-neutral-200 outline-none focus:border-cyan-400"
           >
             {displays.map((display) => (
@@ -520,7 +569,7 @@ export function SectionOutput({ onInteract }) {
                 <div className="mt-2">
                   <button
                     type="button"
-                    onClick={wrap(() => updateProjectionSurface(selectedSurface.id, { sourceMode: 'live', sourceId: 'live' }))}
+                    onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'live', 'live'))}
                     className="rounded border border-amber-500/40 bg-amber-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-400/20"
                   >
                     SET SELECTED TO LIVE
@@ -546,7 +595,7 @@ export function SectionOutput({ onInteract }) {
                 value={`${selectedSurface.sourceMode || 'live'}:${selectedSurface.sourceId || 'live'}`}
                 onChange={wrap((event) => {
                   const [sourceMode, sourceId] = event.target.value.split(':')
-                  updateProjectionSurface(selectedSurface.id, { sourceMode, sourceId })
+                  assignProjectionSurfaceSource(selectedSurface.id, sourceMode, sourceId)
                 })}
                 className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.16em] text-neutral-200 outline-none focus:border-cyan-400"
               >
@@ -557,13 +606,13 @@ export function SectionOutput({ onInteract }) {
               <p className="mt-1.5 text-[9px] leading-relaxed text-neutral-500">
                 {selectedSurfaceSourceMeta?.isLive
                   ? '`LIVE OUTPUT` follows the main generator, geometry, color, and effect controls.'
-                  : 'This surface is independent from live controls until returned to `LIVE OUTPUT`.'}
+                  : 'This surface is independent from live controls until returned to `LIVE OUTPUT`. Media and preset choices here create reusable scenes, then assign that scene to the surface.'}
               </p>
               {selectedSurfaceSourceMeta && !selectedSurfaceSourceMeta.isLive && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={wrap(() => updateProjectionSurface(selectedSurface.id, { sourceMode: 'live', sourceId: 'live' }))}
+                    onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'live', 'live'))}
                     className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
                   >
                     FOLLOW LIVE OUTPUT
@@ -572,28 +621,21 @@ export function SectionOutput({ onInteract }) {
                     <>
                       <button
                         type="button"
+                        onClick={wrap(() => authorProjectionSurfaceScene(selectedSurface.id))}
+                        className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
+                      >
+                        {activeSceneId === selectedSurfaceAssignedScene.id
+                          ? 'AUTHORING SCENE'
+                          : selectedSurfaceSceneIsShared
+                            ? 'FORK + AUTHOR'
+                            : 'AUTHOR SCENE'}
+                      </button>
+                      <button
+                        type="button"
                         onClick={wrap(() => loadSceneToLive(selectedSurfaceAssignedScene.id))}
                         className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
                       >
                         LOAD SCENE TO LIVE
-                      </button>
-                      <button
-                        type="button"
-                        onClick={wrap(() => startSceneEdit(selectedSurfaceAssignedScene.id))}
-                        className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                      >
-                        {sceneEditor?.activeSceneId === selectedSurfaceAssignedScene.id ? 'EDITING SCENE' : 'EDIT SCENE'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={wrap(() => duplicateScene(selectedSurfaceAssignedScene.id, {
-                          surfaceId: selectedSurface.id,
-                          assignSurface: true,
-                          name: `${selectedSurfaceAssignedScene.name} ${selectedSurface.name}`,
-                        }))}
-                        className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                      >
-                        FORK TO SURFACE
                       </button>
                     </>
                   )}
@@ -601,17 +643,17 @@ export function SectionOutput({ onInteract }) {
                     <>
                       <button
                         type="button"
+                        onClick={wrap(() => authorProjectionSurfaceScene(selectedSurface.id))}
+                        className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
+                      >
+                        CREATE + AUTHOR SCENE
+                      </button>
+                      <button
+                        type="button"
                         onClick={wrap(() => captureProjectionSurfaceAsScene(selectedSurface.id))}
                         className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
                       >
                         CAPTURE TO SCENE
-                      </button>
-                      <button
-                        type="button"
-                        onClick={wrap(() => startProjectionSurfaceSceneEdit(selectedSurface.id))}
-                        className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                      >
-                        EDIT AS SCENE
                       </button>
                     </>
                   )}
@@ -619,7 +661,7 @@ export function SectionOutput({ onInteract }) {
               )}
               {selectedSurfaceAssignedScene && selectedSceneUsageCount > 1 && (
                 <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-[9px] leading-relaxed text-amber-100">
-                  This scene is shared by {selectedSceneUsageCount} surfaces. Use <span className="font-semibold">FORK TO SURFACE</span> before editing if this surface should diverge.
+                  This scene is shared by {selectedSceneUsageCount} surfaces. <span className="font-semibold">FORK + AUTHOR</span> will create a surface-specific scene before editing.
                 </div>
               )}
               {selectedSurface.visible === false && (
@@ -776,11 +818,11 @@ export function SectionOutput({ onInteract }) {
                   </button>
                   {selectedSurface && (
                     <button
-                      type="button"
-                      onClick={wrap(() => updateProjectionSurface(selectedSurface.id, { sourceMode: 'media', sourceId: asset.id }))}
-                      className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                    >
-                      ASSIGN
+                    type="button"
+                    onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'media', asset.id))}
+                    className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
+                  >
+                    ASSIGN
                     </button>
                   )}
                   <button
@@ -827,7 +869,14 @@ export function SectionOutput({ onInteract }) {
           <div className="rounded-md border border-cyan-400/30 bg-cyan-950/20 px-3 py-2 text-[9px] leading-relaxed text-cyan-100">
             <div className="font-semibold tracking-[0.16em]">EDITING SCENE · {activeEditedScene.name.toUpperCase()}</div>
             <div className="mt-1 text-cyan-50/80">
-              The live controls are temporarily driving this scene. Use UPDATE to save changes, then restore the previous live composition or keep the edited result intentionally.
+              {activeSceneEditorMode === 'surface' && activeSceneEditorSourceSurfaceName
+                ? `Authoring for ${activeSceneEditorSourceSurfaceName.toUpperCase()}. Control changes are editing this scene draft without overwriting the shared live state.`
+                : 'Authoring from the scene library. Control changes are editing this scene draft without overwriting the shared live state.'}
+            </div>
+            <div className="mt-1 text-cyan-50/80">
+              {activeSceneEditorHasLocalEdits
+                ? 'Autosave is active for this scene draft. Restore Live exits authoring and returns to the previous live composition, while Keep Live applies the draft to live output.'
+                : 'Autosave is armed for this scene draft. Restore Live exits authoring and returns to the previous live composition, while Keep Live applies the draft to live output.'}
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
@@ -854,10 +903,13 @@ export function SectionOutput({ onInteract }) {
                 <div className="min-w-0">
                   <div className="truncate text-[9px] font-semibold tracking-[0.18em] text-cyan-200">{scene.name.toUpperCase()}</div>
                   <div className="text-[8px] tracking-[0.16em] text-neutral-500">
-                    {scene.state.media?.name ? `MEDIA · ${scene.state.media.name.toUpperCase()}` : `GENERATOR · ${(scene.state.generator?.type || 'none').toUpperCase()}`}
+                    {getSceneContentLabel(scene, activeSceneId, activeSceneDraftState)}
                   </div>
                   <div className="mt-1 text-[8px] tracking-[0.14em] text-neutral-600">
-                    Load to the live controls, make changes, then use UPDATE to re-capture this scene.
+                    ORIGIN · {getSceneOriginLabel(scene)}
+                  </div>
+                  <div className="mt-1 text-[8px] tracking-[0.14em] text-neutral-600">
+                    Load to live for a temporary preview, or author from a surface to sync edits directly into this scene.
                   </div>
                   <div className="mt-1 text-[8px] tracking-[0.14em] text-neutral-600">
                     USED BY {sceneUsageCountById.get(scene.id) || 0} SURFACE{(sceneUsageCountById.get(scene.id) || 0) === 1 ? '' : 'S'}
@@ -875,12 +927,12 @@ export function SectionOutput({ onInteract }) {
                     type="button"
                     onClick={wrap(() => startSceneEdit(scene.id))}
                     className={`rounded border px-2 py-1 text-[8px] tracking-[0.18em] transition-colors ${
-                      sceneEditor?.activeSceneId === scene.id
+                      activeSceneId === scene.id
                         ? 'border-cyan-400 bg-cyan-300 text-black'
                         : 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
                     }`}
                   >
-                    {sceneEditor?.activeSceneId === scene.id ? 'EDITING' : 'EDIT'}
+                    {activeSceneId === scene.id ? 'AUTHORING' : 'AUTHOR'}
                   </button>
                   {selectedSurface && (
                     <button
@@ -911,7 +963,7 @@ export function SectionOutput({ onInteract }) {
                     onClick={wrap(() => captureSceneState(scene.id))}
                     className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
                   >
-                    UPDATE
+                    REPLACE FROM LIVE
                   </button>
                   {selectedSurface && (
                     <button

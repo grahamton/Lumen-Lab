@@ -1,22 +1,23 @@
 import { useEffect } from 'react'
-import { useStore } from '../store/useStore'
+import { getEffectiveRenderState, useStore } from '../store/useStore'
 
 const CHANNEL_NAME = 'lumenlab-projection-sync'
 
 function selectProjectionPayload(state) {
+  const effectiveState = getEffectiveRenderState(state)
   return {
-    media: state.media,
+    media: effectiveState.media,
     mediaLibrary: state.mediaLibrary,
-    activeMediaId: state.activeMediaId,
+    activeMediaId: effectiveState.activeMediaId,
     scenes: state.scenes,
-    transforms: state.transforms,
-    symmetry: state.symmetry,
-    warp: state.warp,
-    displacement: state.displacement,
-    tiling: state.tiling,
-    generator: state.generator,
-    color: state.color,
-    effects: state.effects,
+    transforms: effectiveState.transforms,
+    symmetry: effectiveState.symmetry,
+    warp: effectiveState.warp,
+    displacement: effectiveState.displacement,
+    tiling: effectiveState.tiling,
+    generator: effectiveState.generator,
+    color: effectiveState.color,
+    effects: effectiveState.effects,
     canvas: state.canvas,
     audio: state.audio,
     flux: state.flux,

@@ -1,4 +1,4 @@
-import { useStore } from '../../store/useStore'
+import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
@@ -20,17 +20,20 @@ function Toggle({ label, isOn, onToggle }) {
 
 export function SectionEffects({ onInteract }) {
   const { effectsBloom, effectsCA, effectsNoise, audioEnabled, audioSensitivity, setEffect, setAudio, canvasShape, setCanvas } = useStore(
-    useShallow((state) => ({
-      effectsBloom:       state.effects.bloom,
-      effectsCA:          state.effects.chromaticAberration,
-      effectsNoise:       state.effects.noise,
-      audioEnabled:       state.audio.enabled,
-      audioSensitivity:   state.audio.sensitivity,
-      setEffect:          state.setEffect,
-      setAudio:           state.setAudio,
-      canvasShape:        state.canvas.shape,
-      setCanvas:          state.setCanvas,
-    }))
+    useShallow((state) => {
+      const effectiveSceneState = getEffectiveAuthoredSceneState(state)
+      return {
+        effectsBloom: effectiveSceneState.effects.bloom,
+        effectsCA: effectiveSceneState.effects.chromaticAberration,
+        effectsNoise: effectiveSceneState.effects.noise,
+        audioEnabled: state.audio.enabled,
+        audioSensitivity: state.audio.sensitivity,
+        setEffect: state.setEffect,
+        setAudio: state.setAudio,
+        canvasShape: state.canvas.shape,
+        setCanvas: state.setCanvas,
+      }
+    })
   )
 
   function wrap(fn) {

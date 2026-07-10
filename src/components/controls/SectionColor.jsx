@@ -1,5 +1,5 @@
 import React from 'react'
-import { useStore } from '../../store/useStore'
+import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
@@ -23,15 +23,18 @@ export const SectionColor = React.memo(function SectionColor({ onInteract }) {
   // Fine-grained selectors: subscribe to individual leaf values so this component
   // only re-renders when a specific color/effects value actually changes.
   const { colorHue, colorSat, colorLight, colorPosterize, effectsInvert, setColor, setEffect } = useStore(
-    useShallow((s) => ({
-      colorHue:       s.color.hue,
-      colorSat:       s.color.sat,
-      colorLight:     s.color.light,
-      colorPosterize: s.color.posterize,
-      effectsInvert:  s.effects.invert,
-      setColor:       s.setColor,
-      setEffect:      s.setEffect,
-    }))
+    useShallow((s) => {
+      const effectiveSceneState = getEffectiveAuthoredSceneState(s)
+      return {
+        colorHue: effectiveSceneState.color.hue,
+        colorSat: effectiveSceneState.color.sat,
+        colorLight: effectiveSceneState.color.light,
+        colorPosterize: effectiveSceneState.color.posterize,
+        effectsInvert: effectiveSceneState.effects.invert,
+        setColor: s.setColor,
+        setEffect: s.setEffect,
+      }
+    })
   )
 
   function wrap(fn) {

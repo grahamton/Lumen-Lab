@@ -8,6 +8,21 @@ export default defineConfig({
   optimizeDeps: {
     include: ['three', '@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+
+          if (id.includes('/three/') || id.includes('\\three\\')) return 'three-vendor'
+          if (id.includes('@react-three')) return 'react-three-vendor'
+          if (id.includes('postprocessing')) return 'postprocessing-vendor'
+          if (id.includes('zustand')) return 'state-vendor'
+          return 'vendor'
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

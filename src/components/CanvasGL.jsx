@@ -1,11 +1,26 @@
 /* eslint-disable react-hooks/immutability */
 import React, { useRef, useMemo, useEffect, useState, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import * as THREE from 'three'
+import {
+  Texture,
+  Vector2,
+  Vector3,
+  Vector4,
+  VideoTexture,
+  WebGLRenderTarget,
+  LinearFilter,
+  RGBAFormat,
+} from 'three'
 import { EffectComposer, Bloom, Noise, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import { useStore } from '../store/useStore'
 import { useShallow } from 'zustand/shallow'
+import {
+  getActiveAuthoredSceneDraftState,
+  getActiveAuthoredSceneId,
+  getEffectiveAuthoredSceneState,
+  getEffectiveRenderState,
+} from '../store/useStore'
 import { useVideoRecorder } from '../hooks/useVideoRecorder'
 import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
 import { ProjectionCalibrationOverlay } from './ProjectionCalibrationOverlay'
@@ -246,7 +261,7 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
   } = useStore(
     useShallow((state) => ({
       image: state.image,
-      liveMedia: state.media,
+      liveMedia: getEffectiveAuthoredSceneState(state).media,
       exportRequest: state.ui.exportRequest,
       triggerExport: state.triggerExport,
       audioEnabled: state.audio.enabled,
@@ -268,6 +283,13 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
   const [resolvedMedia, setResolvedMedia] = useState(null)
   const lastMeterSyncRef = useRef(0)
   const effectiveMedia = mediaDescriptor ?? liveMedia
+  const canUseImageElement = preferImageElement
+    && image
+    && (
+      !effectiveMedia?.src
+      || image.currentSrc === effectiveMedia.src
+      || image.src === effectiveMedia.src
+    )
 
   // Hooks
   const { isRecording, duration, startRecording, stopRecording } = useVideoRecorder(gl)
@@ -293,7 +315,7 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
 
 
   const [texture] = useState(() => {
-    const t = new THREE.Texture()
+    const t = new Texture()
     t.image = new Image()
     return t
   })
@@ -301,28 +323,28 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
   // ... (rest of uniforms initialization)
   const [uniforms] = useState(() => ({
     uTexture: { value: texture },
-    uResolution: { value: new THREE.Vector2(size.width, size.height) },
+    uResolution: { value: new Vector2(size.width, size.height) },
     uAspect: { value: size.width / size.height },
     uImageAspect: { value: 1.0 }, // New: Image Aspect
     uShape: { value: 0 }, // New: 0=Rect, 1=Circle
     uTime: { value: 0 },
     uGenTime: { value: 0 }, // New: Generator specific time
-    uTransforms: { value: new THREE.Vector4(0, 0, 1, 0) }, // x, y, scale, rotation
+    uTransforms: { value: new Vector4(0, 0, 1, 0) }, // x, y, scale, rotation
     uSymEnabled: { value: false },
     uSymSlices: { value: 6 },
     uSymType: { value: 0 }, // 0=Radial, 1=MirrorX, 2=MirrorY
     uSymOffset: { value: 0 },
     uWarpType: { value: 0 }, // 0=none, 1=polar, 2=log
-    uDisplacement: { value: new THREE.Vector2(0, 10) },
+    uDisplacement: { value: new Vector2(0, 10) },
     uTilingType: { value: 0 }, // 0=none
     uTilingScale: { value: 1 },
     uTilingOverlap: { value: 0 }, // 0-1 blend between tiled/original UVs
     uPosterize: { value: 256 },
-    uColorHSL: { value: new THREE.Vector3(0, 1, 1) },
-    uEffects: { value: new THREE.Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
+    uColorHSL: { value: new Vector3(0, 1, 1) },
+    uEffects: { value: new Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
     uEdgeQuality: { value: 1 }, // 1 = full Sobel (9-tap), 0 = fast Laplacian (5-tap)
     uGenType: { value: 0 },
-    uGenParams: { value: new THREE.Vector3(50, 50, 50) },
+    uGenParams: { value: new Vector3(50, 50, 50) },
     // Audio Uniforms
     uAudioLow: { value: 0 },
     uAudioMid: { value: 0 },
@@ -344,7 +366,7 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
 
   // ... (rest of useEffects)
   useEffect(() => {
-    if (preferImageElement && image) {
+    if (canUseImageElement) {
       setResolvedMedia(image)
       return undefined
     }
@@ -402,7 +424,7 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     return () => {
       disposed = true
     }
-  }, [effectiveMedia, image, preferImageElement])
+  }, [canUseImageElement, effectiveMedia, image])
 
   useEffect(() => {
     if (!resolvedMedia) {
@@ -420,14 +442,14 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     let finalTexture = currentTexture
 
     // If switching types, create new texture instance
-    if (isVideo && !(finalTexture instanceof THREE.VideoTexture)) {
-      finalTexture = new THREE.VideoTexture(resolvedMedia)
+    if (isVideo && !(finalTexture instanceof VideoTexture)) {
+      finalTexture = new VideoTexture(resolvedMedia)
       if (currentTexture && currentTexture !== texture && typeof currentTexture.dispose === 'function') {
         currentTexture.dispose()
       }
       uniformValues.uTexture.value = finalTexture
-    } else if (!isVideo && (finalTexture instanceof THREE.VideoTexture)) {
-      finalTexture = new THREE.Texture(resolvedMedia)
+    } else if (!isVideo && (finalTexture instanceof VideoTexture)) {
+      finalTexture = new Texture(resolvedMedia)
       currentTexture.dispose()
       uniformValues.uTexture.value = finalTexture
     }
@@ -602,10 +624,10 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
         const { width, height, filename } = exportRequest
 
         // Create a RenderTarget
-        const rt = new THREE.WebGLRenderTarget(width, height, {
-          minFilter: THREE.LinearFilter,
-          magFilter: THREE.LinearFilter,
-          format: THREE.RGBAFormat
+        const rt = new WebGLRenderTarget(width, height, {
+          minFilter: LinearFilter,
+          magFilter: LinearFilter,
+          format: RGBAFormat
         })
 
         const uniformValues = uniforms // Current uniforms
@@ -686,9 +708,9 @@ function EffectsLayer() {
   const { perfCapFx, bloom, chromaticRaw, noiseRaw } = useStore(
     useShallow((state) => ({
       perfCapFx: state.ui?.perfCapFx,
-      bloom: state.effects.bloom,
-      chromaticRaw: state.effects.chromaticAberration,
-      noiseRaw: state.effects.noise,
+      bloom: getEffectiveAuthoredSceneState(state).effects.bloom,
+      chromaticRaw: getEffectiveAuthoredSceneState(state).effects.chromaticAberration,
+      noiseRaw: getEffectiveAuthoredSceneState(state).effects.noise,
     }))
   )
 
@@ -711,6 +733,8 @@ export function CanvasGL() {
     lowResPreview,
     mediaLibrary,
     scenes,
+    activeSceneId,
+    activeSceneDraftState,
     projection,
     userPresets,
     setProjection,
@@ -724,6 +748,8 @@ export function CanvasGL() {
       lowResPreview: state.ui.lowResPreview,
       mediaLibrary:  state.mediaLibrary,
       scenes:        state.scenes,
+      activeSceneId:  getActiveAuthoredSceneId(state),
+      activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
       projection:    state.projection,
       userPresets:   state.userPresets,
       setProjection: state.setProjection,
@@ -785,12 +811,14 @@ export function CanvasGL() {
       scenes,
       userPresets,
       builtinPresets: presets,
+      activeSceneId,
+      activeSceneDraftState,
     }).map((definition) => ({
       key: definition.key,
       mediaDescriptor: definition.mediaDescriptor,
-      resolveState: (storeState) => mergeRenderState(storeState, definition.stateOverride || {}),
+      resolveState: (storeState) => mergeRenderState(getEffectiveRenderState(storeState), definition.stateOverride || {}),
     }))
-  }, [mediaLibrary, renderableVisibleSurfaces, scenes, surfaceModeActive, userPresets])
+  }, [activeSceneDraftState, activeSceneId, mediaLibrary, renderableVisibleSurfaces, scenes, surfaceModeActive, userPresets])
   const registerAuxSourceCanvas = useCallback((sourceKey, canvasElement) => {
     setAuxSourceCanvases((current) => updateProjectionCanvasRegistry(current, sourceKey, canvasElement))
   }, [])
@@ -867,6 +895,7 @@ export function CanvasGL() {
             onCreated={({ gl }) => setSourceCanvasElement(gl.domElement)}
           >
             <VisualizerScene
+              renderState={getEffectiveRenderState}
               enableOutputActions={!projectionWindowMode}
               useMirroredAudio={projectionWindowMode}
             />

@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, useCallback, useEffect } from 'react'
-import { useStore } from '../../store/useStore'
+import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
 
@@ -72,12 +72,12 @@ export function TopStrip() {
     addMediaAsset, setActiveMediaAsset, setGenerator, setTransform, setColor, setImage, resetForUpload
   } = useStore(
     useShallow((state) => ({
-      generatorType:   state.generator.type,
-      generatorParam3: state.generator.param3,
-      transformsScale: state.transforms.scale,
-      colorHue:        state.color.hue,
-      activeMediaId:   state.activeMediaId,
-      media:           state.media,
+      generatorType:   getEffectiveAuthoredSceneState(state).generator.type,
+      generatorParam3: getEffectiveAuthoredSceneState(state).generator.param3,
+      transformsScale: getEffectiveAuthoredSceneState(state).transforms.scale,
+      colorHue:        getEffectiveAuthoredSceneState(state).color.hue,
+      activeMediaId:   getEffectiveAuthoredSceneState(state).activeMediaId,
+      media:           getEffectiveAuthoredSceneState(state).media,
       mediaLibrary:    state.mediaLibrary,
       image:           state.image,
       addMediaAsset:   state.addMediaAsset,

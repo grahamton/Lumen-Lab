@@ -5,7 +5,7 @@ import { useAnimator } from './hooks/useAnimator'
 import { useGamepad } from './hooks/useGamepad'
 import { useProjectionStateBridge } from './hooks/useProjectionStateBridge'
 import { presets } from './presets'
-import { useStore } from './store/useStore'
+import { getEffectiveAuthoredSceneState, useStore } from './store/useStore'
 import { hasRenderableProjectionSurface } from './utils/projectionSources'
 import { isProjectionWindow } from './utils/windowMode'
 import { midiManager } from './core/MidiManager'
@@ -21,9 +21,11 @@ function App() {
   useAnimator(!projectionWindowMode) // Hook for physics/animation loop (updates store)
   useGamepad(!projectionWindowMode) // Hook for Xbox controller input
   useProjectionStateBridge(projectionWindowMode)
-  const hasVisualSource = useStore((state) => (
-    state.media ||
-    (state.generator?.type && state.generator.type !== 'none') ||
+  const hasVisualSource = useStore((state) => {
+    const effectiveSceneState = getEffectiveAuthoredSceneState(state)
+    return (
+      effectiveSceneState.media ||
+      (effectiveSceneState.generator?.type && effectiveSceneState.generator.type !== 'none') ||
     hasRenderableProjectionSurface(state.projection, {
       mediaLibrary: state.mediaLibrary,
       scenes: state.scenes,
@@ -32,7 +34,8 @@ function App() {
     }) ||
     state.projection?.blackout ||
     (state.projection?.patternMode && state.projection.patternMode !== 'off')
-  ))
+    )
+  })
   const controlsOpen = useStore((state) => state.ui.controlsOpen)
   const recordingIsActive = useStore((state) => state.recording.isActive)
 

@@ -18,6 +18,21 @@ function mergeProjectionSceneState(baseState = {}, overrideState = {}) {
   }
 }
 
+function resolveSceneState(scene, activeSceneId = null, activeSceneDraftState = null) {
+  if (!scene) return null
+  if (activeSceneDraftState && activeSceneId != null && String(scene.id) === String(activeSceneId)) {
+    return activeSceneDraftState
+  }
+  return scene.state || null
+}
+
+export function getDraftAwareSceneState(scene, {
+  activeSceneId = null,
+  activeSceneDraftState = null,
+} = {}) {
+  return resolveSceneState(scene, activeSceneId, activeSceneDraftState)
+}
+
 export function getProjectionSourceKey(surface) {
   const sourceMode = getSurfaceSourceMode(surface)
   const sourceId = surface?.sourceId ?? 'live'
@@ -115,6 +130,8 @@ export function getProjectionSurfaceSourceDefinition(surface, {
   scenes = [],
   userPresets = [],
   builtinPresets = [],
+  activeSceneId = null,
+  activeSceneDraftState = null,
 } = {}) {
   const meta = getProjectionSurfaceSourceMeta(surface, {
     mediaLibrary,
@@ -148,11 +165,12 @@ export function getProjectionSurfaceSourceDefinition(surface, {
 
   if (meta.sourceMode === 'scene') {
     const scene = scenes.find((entry) => String(entry.id) === String(meta.sourceId)) || null
+    const sceneState = resolveSceneState(scene, activeSceneId, activeSceneDraftState)
     return {
       key: getProjectionSourceKey(surface),
       meta,
-      mediaDescriptor: scene?.state?.media || null,
-      stateOverride: scene?.state || null,
+      mediaDescriptor: sceneState?.media || null,
+      stateOverride: sceneState,
     }
   }
 
@@ -223,12 +241,16 @@ export function getProjectionSurfaceSceneState(surface, {
   scenes = [],
   userPresets = [],
   builtinPresets = [],
+  activeSceneId = null,
+  activeSceneDraftState = null,
 } = {}) {
   const definition = getProjectionSurfaceSourceDefinition(surface, {
     mediaLibrary,
     scenes,
     userPresets,
     builtinPresets,
+    activeSceneId,
+    activeSceneDraftState,
   })
 
   if (!definition.meta.isValid) return null

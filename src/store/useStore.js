@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { CONTROLS } from '../config/uiConfig'
 import { presets } from '../presets'
 import {
+  getDraftAwareSceneState,
   getProjectionSurfaceSceneState,
   getProjectionSurfaceSourceMeta,
 } from '../utils/projectionSources'
@@ -42,6 +43,30 @@ function cloneProjectData(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+const SCENE_STATE_KEYS = [
+  'transforms',
+  'symmetry',
+  'warp',
+  'displacement',
+  'tiling',
+  'color',
+  'effects',
+  'generator',
+  'media',
+  'activeMediaId',
+]
+
+const SCENE_STATE_SECTION_KEYS = new Set([
+  'transforms',
+  'symmetry',
+  'warp',
+  'displacement',
+  'tiling',
+  'color',
+  'effects',
+  'generator',
+])
+
 function createSceneStateSnapshot(state) {
   return {
     transforms: { ...state.transforms },
@@ -54,6 +79,14 @@ function createSceneStateSnapshot(state) {
     generator: { ...state.generator },
     media: state.media ? { ...state.media } : null,
     activeMediaId: state.activeMediaId,
+  }
+}
+
+function createSceneOrigin(sourceMode, sourceId = null, extra = {}) {
+  return {
+    type: sourceMode || 'live',
+    sourceId: sourceId ?? null,
+    ...cloneProjectData(extra),
   }
 }
 
@@ -96,20 +129,48 @@ function createProjectProjectionState(projection) {
   }
 }
 
+function createProjectLayoutState(state) {
+  return {
+    canvas: cloneProjectData(state.canvas),
+    projection: createProjectProjectionState(state.projection),
+  }
+}
+
+function createProjectSourceState(state) {
+  return {
+    mediaLibrary: cloneProjectData(state.mediaLibrary) || [],
+    scenes: cloneProjectData(state.scenes) || [],
+  }
+}
+
+function createProjectLookPresetState(state) {
+  return {
+    userPresets: cloneProjectData(state.userPresets) || [],
+    snapshots: cloneProjectData(state.snapshots) || [],
+  }
+}
+
 function createProjectDocument(state) {
+  const layout = createProjectLayoutState(state)
+  const sources = createProjectSourceState(state)
+  const lookPresets = createProjectLookPresetState(state)
+
   return {
     type: 'lumenlab-project',
     version: PROJECT_DOCUMENT_VERSION,
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     project: {
+      layout,
+      sources,
+      lookPresets,
       liveState: createSceneStateSnapshot(state),
-      canvas: cloneProjectData(state.canvas),
-      mediaLibrary: cloneProjectData(state.mediaLibrary) || [],
-      projection: createProjectProjectionState(state.projection),
-      snapshots: cloneProjectData(state.snapshots) || [],
-      scenes: cloneProjectData(state.scenes) || [],
-      userPresets: cloneProjectData(state.userPresets) || [],
+      canvas: layout.canvas,
+      mediaLibrary: sources.mediaLibrary,
+      projection: layout.projection,
+      snapshots: lookPresets.snapshots,
+      scenes: sources.scenes,
+      userPresets: lookPresets.userPresets,
       audio: cloneProjectData(state.audio),
       flux: cloneProjectData(state.flux),
       animation: cloneProjectData(state.animation),
@@ -126,26 +187,186 @@ function getProjectPayload(doc) {
 function createProjectionSurfaceSceneRecord(state, surfaceId, name = null) {
   const targetSurface = (state.projection.surfaces || []).find((surface) => surface.id === surfaceId)
   if (!targetSurface) return null
-
-  const sceneState = getProjectionSurfaceSceneState(targetSurface, {
+  return createProjectionSceneRecordFromSourceState({
+    sourceMode: targetSurface.sourceMode || 'live',
+    sourceId: targetSurface.sourceId ?? null,
     liveState: createSceneStateSnapshot(state),
     mediaLibrary: state.mediaLibrary,
     scenes: state.scenes,
     userPresets: state.userPresets,
     builtinPresets: presets,
+    activeSceneId: getActiveAuthoredSceneId(state),
+    activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
+    name: name || `${targetSurface.name} Scene`,
+    extraOrigin: {
+      capturedFromSurfaceId: targetSurface.id,
+      capturedFromSurfaceName: targetSurface.name,
+    },
+  })
+}
+
+function createProjectionSceneRecordFromSourceState({
+  sourceMode,
+  sourceId,
+  liveState,
+  mediaLibrary,
+  scenes,
+  userPresets,
+  builtinPresets,
+  activeSceneId = null,
+  activeSceneDraftState = null,
+  name = null,
+  extraOrigin = {},
+}) {
+  const sourceMeta = getProjectionSurfaceSourceMeta({ sourceMode, sourceId }, {
+    mediaLibrary,
+    scenes,
+    userPresets,
+    builtinPresets,
+  })
+
+  const sceneState = getProjectionSurfaceSceneState({ sourceMode, sourceId }, {
+    liveState,
+    mediaLibrary,
+    scenes,
+    userPresets,
+    builtinPresets,
+    activeSceneId,
+    activeSceneDraftState,
   })
 
   if (!sceneState) return null
 
   const sceneId = `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`
+  let defaultName = 'Scene'
+  let origin = createSceneOrigin(sourceMode, sourceId)
+
+  if (sourceMode === 'media') {
+    const asset = (mediaLibrary || []).find((entry) => String(entry.id) === String(sourceId))
+    defaultName = asset?.name ? `${asset.name} Scene` : 'Media Scene'
+    origin = createSceneOrigin(sourceMode, sourceId, {
+      label: asset?.name ? `MEDIA · ${asset.name}` : sourceMeta.label,
+      detail: 'Created from a media assignment shortcut.',
+      mediaName: asset?.name || null,
+      ...extraOrigin,
+    })
+  } else if (sourceMode === 'builtin') {
+    const preset = builtinPresets[Number(sourceId)] || null
+    defaultName = preset?.name ? `${preset.name} Scene` : 'Built-In Scene'
+    origin = createSceneOrigin(sourceMode, sourceId, {
+      label: preset?.name ? `BUILT-IN · ${preset.name}` : sourceMeta.label,
+      detail: 'Created from a built-in preset shortcut.',
+      presetName: preset?.name || null,
+      ...extraOrigin,
+    })
+  } else if (sourceMode === 'user') {
+    const preset = (userPresets || []).find((entry) => String(entry.id) === String(sourceId))
+    defaultName = preset?.name ? `${preset.name} Scene` : 'Preset Scene'
+    origin = createSceneOrigin(sourceMode, sourceId, {
+      label: preset?.name ? `USER · ${preset.name}` : sourceMeta.label,
+      detail: 'Created from a user preset shortcut.',
+      presetName: preset?.name || null,
+      ...extraOrigin,
+    })
+  }
+
   return {
     sceneId,
-    targetSurface,
     nextScene: {
       id: sceneId,
-      name: name || `${targetSurface.name} Scene`,
+      name: name || defaultName,
       state: sceneState,
+      origin,
     },
+    sourceMeta,
+  }
+}
+
+function mergeSceneStateSnapshot(baseState, patch = {}) {
+  return {
+    transforms: patch.transforms ?? { ...(baseState.transforms || {}) },
+    symmetry: patch.symmetry ?? { ...(baseState.symmetry || {}) },
+    warp: patch.warp ?? { ...(baseState.warp || {}) },
+    displacement: patch.displacement ?? { ...(baseState.displacement || {}) },
+    tiling: patch.tiling ?? { ...(baseState.tiling || {}) },
+    color: patch.color ?? { ...(baseState.color || {}) },
+    effects: patch.effects ?? { ...(baseState.effects || {}) },
+    generator: patch.generator ?? { ...(baseState.generator || {}) },
+    media: Object.hasOwn(patch, 'media') ? patch.media : (baseState.media ?? null),
+    activeMediaId: Object.hasOwn(patch, 'activeMediaId')
+      ? patch.activeMediaId
+      : (baseState.activeMediaId ?? baseState.media?.id ?? null),
+  }
+}
+
+function createProjectionSceneRecordFromSource(state, sourceMode, sourceId, name = null, extraOrigin = {}) {
+  const sceneRecord = createProjectionSceneRecordFromSourceState({
+    sourceMode,
+    sourceId,
+    liveState: createSceneStateSnapshot(state),
+    mediaLibrary: state.mediaLibrary,
+    scenes: state.scenes,
+    userPresets: state.userPresets,
+    builtinPresets: presets,
+    activeSceneId: getActiveAuthoredSceneId(state),
+    activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
+    name,
+    extraOrigin,
+  })
+
+  if (!sceneRecord) return null
+
+  return {
+    sceneId: sceneRecord.sceneId,
+    targetSurface: null,
+    nextScene: sceneRecord.nextScene,
+  }
+}
+
+function normalizeProjectionSourcesInState(state) {
+  const liveState = createSceneStateSnapshot(state)
+  const nextScenes = [...(cloneProjectData(state.scenes) || [])]
+  const seenSceneKeys = new Map()
+  const normalizedProjection = {
+    ...state.projection,
+    surfaces: (cloneProjectData(state.projection?.surfaces) || []).map((surface) => {
+      if (!surface || surface.visible === false) return surface
+      if (surface.sourceMode !== 'media' && surface.sourceMode !== 'builtin' && surface.sourceMode !== 'user') {
+        return surface
+      }
+
+      const sourceKey = `${surface.sourceMode}:${surface.sourceId}`
+      let sceneId = seenSceneKeys.get(sourceKey)
+      if (!sceneId) {
+        const sceneRecord = createProjectionSceneRecordFromSourceState({
+          sourceMode: surface.sourceMode,
+          sourceId: surface.sourceId,
+          liveState,
+          mediaLibrary: state.mediaLibrary,
+          scenes: nextScenes,
+          userPresets: state.userPresets,
+          builtinPresets: presets,
+        })
+
+        if (!sceneRecord) return surface
+
+        sceneId = sceneRecord.sceneId
+        seenSceneKeys.set(sourceKey, sceneId)
+        nextScenes.push(sceneRecord.nextScene)
+      }
+
+      return {
+        ...surface,
+        sourceMode: 'scene',
+        sourceId: sceneId,
+      }
+    }),
+  }
+
+  return {
+    ...state,
+    scenes: nextScenes,
+    projection: normalizedProjection,
   }
 }
 
@@ -155,6 +376,137 @@ function createLiveProjectionSurface(surface) {
     sourceMode: 'live',
     sourceId: 'live',
   }
+}
+
+function countSceneSurfaceUsage(surfaces = [], sceneId) {
+  return surfaces.filter((surface) => (
+    surface?.sourceMode === 'scene' && String(surface.sourceId) === String(sceneId)
+  )).length
+}
+
+function withActiveSceneSnapshot(state, patch) {
+  const activeSceneId = getActiveAuthoredSceneId(state)
+  if (!activeSceneId) return patch
+
+  const scenePatch = {}
+  const rootPatch = { ...patch }
+  let hasScenePatch = false
+
+  for (const key of SCENE_STATE_KEYS) {
+    if (!Object.hasOwn(rootPatch, key)) continue
+    scenePatch[key] = rootPatch[key]
+    delete rootPatch[key]
+    hasScenePatch = true
+  }
+
+  if (!hasScenePatch) return patch
+
+  const nextDraftState = mergeSceneStateSnapshot(getEffectiveAuthoredSceneState(state), scenePatch)
+  const sourceScenes = rootPatch.scenes ?? state.scenes ?? []
+  return {
+    ...rootPatch,
+    scenes: sourceScenes.map((scene) => (
+      String(scene.id) === String(activeSceneId)
+        ? { ...scene, state: cloneProjectData(nextDraftState) }
+        : scene
+    )),
+    sceneEditor: {
+      ...(rootPatch.sceneEditor || state.sceneEditor),
+      hasLocalEdits: true,
+      draftState: nextDraftState,
+    },
+  }
+}
+
+function createSceneEditorSession({
+  activeSceneId,
+  originalLiveState,
+  mode = 'library',
+  sourceSurfaceId = null,
+  sourceSurfaceName = null,
+  hasLocalEdits = false,
+  draftState = null,
+}) {
+  return {
+    activeSceneId,
+    originalLiveState,
+    mode,
+    sourceSurfaceId,
+    sourceSurfaceName,
+    hasLocalEdits,
+    draftState,
+  }
+}
+
+function clearSceneEditorSession() {
+  return { ...DEFAULTS.sceneEditor }
+}
+
+export function getActiveSceneEditorSession(state) {
+  return state?.sceneEditor || { ...DEFAULTS.sceneEditor }
+}
+
+export function getActiveAuthoredSceneId(state) {
+  return getActiveSceneEditorSession(state).activeSceneId
+}
+
+export function getActiveAuthoredSceneDraftState(state) {
+  return getActiveSceneEditorSession(state).draftState || null
+}
+
+export function getActiveSceneEditorOriginalLiveState(state) {
+  return getActiveSceneEditorSession(state).originalLiveState || null
+}
+
+export function getActiveSceneEditorMode(state) {
+  return getActiveSceneEditorSession(state).mode || null
+}
+
+export function getActiveSceneEditorSourceSurfaceName(state) {
+  return getActiveSceneEditorSession(state).sourceSurfaceName || null
+}
+
+export function getActiveSceneEditorHasLocalEdits(state) {
+  return Boolean(getActiveSceneEditorSession(state).hasLocalEdits)
+}
+
+export function getEffectiveAuthoredSceneState(state) {
+  const draftState = getActiveAuthoredSceneDraftState(state)
+  if (draftState) return draftState
+
+  return {
+    transforms: state.transforms,
+    symmetry: state.symmetry,
+    warp: state.warp,
+    displacement: state.displacement,
+    tiling: state.tiling,
+    color: state.color,
+    effects: state.effects,
+    generator: state.generator,
+    media: state.media,
+    activeMediaId: state.activeMediaId,
+  }
+}
+
+export function getEffectiveRenderState(state) {
+  const effectiveSceneState = getEffectiveAuthoredSceneState(state)
+  return {
+    ...state,
+    transforms: effectiveSceneState.transforms,
+    symmetry: effectiveSceneState.symmetry,
+    warp: effectiveSceneState.warp,
+    displacement: effectiveSceneState.displacement,
+    tiling: effectiveSceneState.tiling,
+    color: effectiveSceneState.color,
+    effects: effectiveSceneState.effects,
+    generator: effectiveSceneState.generator,
+    media: effectiveSceneState.media,
+    activeMediaId: effectiveSceneState.activeMediaId,
+  }
+}
+
+function getEffectiveSceneSection(state, key) {
+  return getEffectiveAuthoredSceneState(state)?.[key] ?? state[key]
 }
 
 function resetProjectionSurfaceSources(surfaces = [], predicate = () => true) {
@@ -244,6 +596,11 @@ const DEFAULTS = {
   sceneEditor: {
     activeSceneId: null,
     originalLiveState: null,
+    mode: null,
+    sourceSurfaceId: null,
+    sourceSurfaceName: null,
+    hasLocalEdits: false,
+    draftState: null,
   },
   userPresets: [],
   animation: {
@@ -303,9 +660,9 @@ export const useStore = create(
 
       // --- Setters ---
       setImage: (img) => set({ image: img }),
-      setMedia: (media) => set((state) => ({
+      setMedia: (media) => set((state) => withActiveSceneSnapshot(state, {
         media,
-        activeMediaId: media?.id ?? (media ? state.activeMediaId : null),
+        activeMediaId: media?.id ?? (media ? getEffectiveAuthoredSceneState(state).activeMediaId : null),
         image: null,
       })),
       addMediaAsset: (asset, options = {}) => set((state) => {
@@ -315,22 +672,22 @@ export const useStore = create(
           asset,
         ]
 
-        return {
+        return withActiveSceneSnapshot(state, {
           mediaLibrary: nextLibrary,
-          activeMediaId: activate ? asset.id : state.activeMediaId,
-          media: activate ? asset : state.media,
+          activeMediaId: activate ? asset.id : getEffectiveAuthoredSceneState(state).activeMediaId,
+          media: activate ? asset : getEffectiveAuthoredSceneState(state).media,
           image: activate ? null : state.image,
-        }
+        })
       }),
       setActiveMediaAsset: (id) => set((state) => {
         const asset = (state.mediaLibrary || []).find((entry) => String(entry.id) === String(id))
         if (!asset) return {}
 
-        return {
+        return withActiveSceneSnapshot(state, {
           activeMediaId: asset.id,
           media: asset,
           image: null,
-        }
+        })
       }),
       renameMediaAsset: (id, name) => set((state) => {
         const mediaLibrary = (state.mediaLibrary || []).map((asset) => (
@@ -442,6 +799,15 @@ export const useStore = create(
 
           // Update the specific section
           // We need to handle nested state updates carefully
+          if (SCENE_STATE_SECTION_KEYS.has(section)) {
+            return withActiveSceneSnapshot(state, {
+              [section]: {
+                ...getEffectiveSceneSection(state, section),
+                [param]: val,
+              },
+            })
+          }
+
           return {
             [section]: {
               ...state[section],
@@ -469,7 +835,9 @@ export const useStore = create(
       })),
 
       stopAllMotion: () => set((state) => ({
-        generator: { ...state.generator, isAnimated: false },
+        ...withActiveSceneSnapshot(state, {
+          generator: { ...getEffectiveSceneSection(state, 'generator'), isAnimated: false },
+        }),
         animation: { ...state.animation, isPlaying: false },
         flux: { ...state.flux, enabled: false },
         audio: { ...state.audio, enabled: false },
@@ -485,6 +853,7 @@ export const useStore = create(
       randomize: () => {
         get().pushUndo()
         set((state) => {
+          const effectiveSceneState = getEffectiveAuthoredSceneState(state)
           const rng = (min, max) => Math.random() * (max - min) + min
           const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
@@ -492,7 +861,7 @@ export const useStore = create(
           const tilingType = Math.random() > 0.3 ? pick(['p1', 'p2', 'p4m']) : 'none'
           const warpType = Math.random() > 0.4 ? pick(['polar', 'log-polar']) : 'none'
 
-          return {
+          return withActiveSceneSnapshot(state, {
             transforms: {
               x: rng(-100, 100),
               y: rng(-100, 100),
@@ -501,9 +870,9 @@ export const useStore = create(
             },
             symmetry: {
               enabled: Math.random() > 0.3,
-              type: state.symmetry.type,
+              type: effectiveSceneState.symmetry.type,
               slices: symmetrySlices,
-              offset: state.symmetry.offset
+              offset: effectiveSceneState.symmetry.offset
             },
             warp: { type: warpType },
             displacement: {
@@ -515,7 +884,7 @@ export const useStore = create(
               scale: rng(0.5, 1.5),
             },
             color: {
-              ...state.color,
+              ...effectiveSceneState.color,
               posterize: Math.random() > 0.6 ? Math.floor(rng(4, 16)) : 256,
             },
             effects: {
@@ -528,24 +897,17 @@ export const useStore = create(
               noise: Math.random() > 0.8 ? rng(0, 0.2) : 0,
             },
             generator: {
-              ...state.generator,
+              ...effectiveSceneState.generator,
               param1: rng(10, 90),
               param2: rng(10, 90),
             },
-          }
+          })
         })
       },
 
       addSnapshot: () => set((state) => {
         const snap = {
-          transforms: { ...state.transforms },
-          symmetry: { ...state.symmetry },
-          warp: { ...state.warp },
-          displacement: { ...state.displacement },
-          tiling: { ...state.tiling },
-          color: { ...state.color },
-          effects: { ...state.effects },
-          generator: { ...state.generator },
+          ...cloneProjectData(getEffectiveAuthoredSceneState(state)),
           id: Date.now()
         }
         return { snapshots: [...state.snapshots, snap] }
@@ -555,13 +917,13 @@ export const useStore = create(
         snapshots: state.snapshots.filter((_, i) => i !== index)
       })),
 
-      loadSnapshot: (snap) => set((state) => applySceneStateSnapshot(state, snap)),
+      loadSnapshot: (snap) => set((state) => withActiveSceneSnapshot(state, applySceneStateSnapshot(state, snap))),
 
       saveUserPreset: (name) => set((state) => {
         const newPreset = {
           name,
           id: Date.now(),
-          state: createSceneStateSnapshot(state),
+          state: cloneProjectData(getEffectiveAuthoredSceneState(state)),
         }
         return { userPresets: [...(state.userPresets || []), newPreset] }
       }),
@@ -573,9 +935,12 @@ export const useStore = create(
         if (!project) return {}
 
         const liveState = project.liveState || {}
+        const layoutSource = project.layout || project
+        const sourcesSource = project.sources || project
+        const lookPresetsSource = project.lookPresets || project
         const nextProjection = {
           ...DEFAULTS.projection,
-          ...createProjectProjectionState(project.projection),
+          ...createProjectProjectionState(layoutSource.projection || project.projection),
           calibrating: false,
           editingSurfaces: false,
           surfaceEditMode: DEFAULTS.projection.surfaceEditMode,
@@ -584,11 +949,12 @@ export const useStore = create(
           outputWindowOpen: false,
         }
 
-        return {
+        const importedState = normalizeProjectionSourcesInState({
+          ...state,
           schemaVersion: SCHEMA_VERSION,
           image: null,
           media: liveState.media ? cloneProjectData(liveState.media) : null,
-          mediaLibrary: cloneProjectData(project.mediaLibrary) || [],
+          mediaLibrary: cloneProjectData(sourcesSource.mediaLibrary) || [],
           activeMediaId: liveState.activeMediaId ?? liveState.media?.id ?? null,
           transforms: { ...DEFAULTS.transforms, ...(liveState.transforms || {}) },
           symmetry: { ...DEFAULTS.symmetry, ...(liveState.symmetry || {}) },
@@ -598,12 +964,12 @@ export const useStore = create(
           generator: { ...DEFAULTS.generator, ...(liveState.generator || {}) },
           color: { ...DEFAULTS.color, ...(liveState.color || {}) },
           effects: { ...DEFAULTS.effects, ...(liveState.effects || {}) },
-          canvas: { ...DEFAULTS.canvas, ...(project.canvas || {}) },
+          canvas: { ...DEFAULTS.canvas, ...(layoutSource.canvas || {}) },
           projection: nextProjection,
-          snapshots: cloneProjectData(project.snapshots) || [],
-          scenes: cloneProjectData(project.scenes) || [],
-          sceneEditor: { ...DEFAULTS.sceneEditor },
-          userPresets: cloneProjectData(project.userPresets) || [],
+          snapshots: cloneProjectData(lookPresetsSource.snapshots) || [],
+          scenes: cloneProjectData(sourcesSource.scenes) || [],
+          sceneEditor: clearSceneEditorSession(),
+          userPresets: cloneProjectData(lookPresetsSource.userPresets) || [],
           animation: { ...DEFAULTS.animation, ...(project.animation || {}) },
           flux: { ...DEFAULTS.flux, ...(project.flux || {}) },
           audio: { ...DEFAULTS.audio, ...(project.audio || {}) },
@@ -615,18 +981,30 @@ export const useStore = create(
             exportRequest: null,
             resetNotice: null,
           },
+        })
+
+        return {
+          ...importedState,
+          schemaVersion: SCHEMA_VERSION,
         }
       }),
 
       saveScene: (name, options = {}) => set((state) => {
         const sceneId = `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`
+        const selectedSurfaceId = state.projection.selectedSurfaceId
+        const selectedSurface = (state.projection.surfaces || []).find((surface) => surface.id === selectedSurfaceId) || null
         const newScene = {
           id: sceneId,
           name,
-          state: createSceneStateSnapshot(state),
+          state: cloneProjectData(getEffectiveAuthoredSceneState(state)),
+          origin: createSceneOrigin('live', 'live', {
+            label: 'LIVE OUTPUT',
+            detail: 'Captured from the live controls.',
+            capturedFromSurfaceId: selectedSurface?.id || null,
+            capturedFromSurfaceName: selectedSurface?.name || null,
+          }),
         }
         const assignSelectedSurface = options.assignSelectedSurface !== false
-        const selectedSurfaceId = state.projection.selectedSurfaceId
 
         return {
           scenes: [...(state.scenes || []), newScene],
@@ -664,13 +1042,13 @@ export const useStore = create(
 
       startProjectionSurfaceSceneEdit: (surfaceId = null, name = null) => set((state) => {
         const targetSurfaceId = surfaceId || state.projection.selectedSurfaceId
+        const targetSurface = (state.projection.surfaces || []).find((surface) => surface.id === targetSurfaceId) || null
         const sceneRecord = createProjectionSurfaceSceneRecord(state, targetSurfaceId, name)
         if (!sceneRecord) return {}
 
         const originalLiveState = state.sceneEditor?.originalLiveState || createSceneStateSnapshot(state)
 
         return {
-          ...applySceneStateSnapshot(state, sceneRecord.nextScene.state),
           scenes: [...(state.scenes || []), sceneRecord.nextScene],
           projection: {
             ...state.projection,
@@ -681,10 +1059,100 @@ export const useStore = create(
                 : surface
             )),
           },
-          sceneEditor: {
+          sceneEditor: createSceneEditorSession({
             activeSceneId: sceneRecord.sceneId,
             originalLiveState,
+            mode: 'surface',
+            sourceSurfaceId: targetSurfaceId,
+            sourceSurfaceName: targetSurface?.name || null,
+            draftState: cloneProjectData(sceneRecord.nextScene.state),
+          }),
+        }
+      }),
+
+      authorProjectionSurfaceScene: (surfaceId = null, options = {}) => set((state) => {
+        const targetSurfaceId = surfaceId || state.projection.selectedSurfaceId
+        const targetSurface = (state.projection.surfaces || []).find((surface) => surface.id === targetSurfaceId)
+        if (!targetSurface) return {}
+
+        const originalLiveState = state.sceneEditor?.originalLiveState || createSceneStateSnapshot(state)
+
+        if (targetSurface.sourceMode === 'scene' && targetSurface.sourceId) {
+          const sourceScene = (state.scenes || []).find((scene) => String(scene.id) === String(targetSurface.sourceId))
+          if (!sourceScene?.state) return {}
+
+          const usageCount = countSceneSurfaceUsage(state.projection.surfaces || [], sourceScene.id)
+          if (usageCount <= 1 && options.forkShared !== true) {
+            return {
+              sceneEditor: createSceneEditorSession({
+                activeSceneId: sourceScene.id,
+                originalLiveState,
+                mode: 'surface',
+                sourceSurfaceId: targetSurfaceId,
+                sourceSurfaceName: targetSurface?.name || null,
+                draftState: cloneProjectData(sourceScene.state),
+              }),
+            }
+          }
+
+          const nextSceneId = `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`
+          const nextScene = {
+            ...cloneProjectData(sourceScene),
+            id: nextSceneId,
+            name: options.name || `${sourceScene.name} ${targetSurface.name}`,
+            origin: createSceneOrigin('scene', sourceScene.id, {
+              label: `SCENE · ${sourceScene.name}`,
+              detail: 'Forked for surface-specific authoring.',
+              sourceSceneName: sourceScene.name,
+              forkedForSurfaceId: targetSurface.id,
+              forkedForSurfaceName: targetSurface.name,
+            }),
+          }
+
+          return {
+            scenes: [...(state.scenes || []), nextScene],
+            projection: {
+              ...state.projection,
+              selectedSurfaceId: targetSurfaceId,
+              surfaces: (state.projection.surfaces || []).map((surface) => (
+                surface.id === targetSurfaceId
+                  ? { ...surface, sourceMode: 'scene', sourceId: nextSceneId }
+                  : surface
+              )),
+            },
+            sceneEditor: createSceneEditorSession({
+              activeSceneId: nextSceneId,
+              originalLiveState,
+              mode: 'surface',
+              sourceSurfaceId: targetSurfaceId,
+              sourceSurfaceName: targetSurface?.name || null,
+              draftState: cloneProjectData(nextScene.state),
+            }),
+          }
+        }
+
+        const sceneRecord = createProjectionSurfaceSceneRecord(state, targetSurfaceId, options.name || null)
+        if (!sceneRecord) return {}
+
+        return {
+          scenes: [...(state.scenes || []), sceneRecord.nextScene],
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: targetSurfaceId,
+            surfaces: (state.projection.surfaces || []).map((surface) => (
+              surface.id === targetSurfaceId
+                ? { ...surface, sourceMode: 'scene', sourceId: sceneRecord.sceneId }
+                : surface
+            )),
           },
+          sceneEditor: createSceneEditorSession({
+            activeSceneId: sceneRecord.sceneId,
+            originalLiveState,
+            mode: 'surface',
+            sourceSurfaceId: targetSurfaceId,
+            sourceSurfaceName: targetSurface?.name || null,
+            draftState: cloneProjectData(sceneRecord.nextScene.state),
+          }),
         }
       }),
 
@@ -699,6 +1167,11 @@ export const useStore = create(
           ...cloneProjectData(sourceScene),
           id: nextSceneId,
           name: options.name || `${sourceScene.name} Copy`,
+          origin: createSceneOrigin('scene', sourceScene.id, {
+            label: `SCENE · ${sourceScene.name}`,
+            detail: 'Forked from another reusable scene.',
+            sourceSceneName: sourceScene.name,
+          }),
         }
 
         return {
@@ -726,59 +1199,70 @@ export const useStore = create(
       captureSceneState: (id) => set((state) => ({
         scenes: (state.scenes || []).map((scene) => (
           String(scene.id) === String(id)
-            ? { ...scene, state: createSceneStateSnapshot(state) }
+            ? { ...scene, state: cloneProjectData(getEffectiveAuthoredSceneState(state)) }
             : scene
         )),
+        sceneEditor: getActiveAuthoredSceneId(state) && String(getActiveAuthoredSceneId(state)) === String(id)
+          ? {
+            ...state.sceneEditor,
+            hasLocalEdits: false,
+            draftState: cloneProjectData(getEffectiveAuthoredSceneState(state)),
+          }
+          : state.sceneEditor,
       })),
 
       loadSceneToLive: (id) => set((state) => {
         const scene = (state.scenes || []).find((entry) => String(entry.id) === String(id))
-        if (!scene?.state) return {}
+        const sceneState = getDraftAwareSceneState(scene, {
+          activeSceneId: getActiveAuthoredSceneId(state),
+          activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
+        })
+        if (!sceneState) return {}
 
-        return applySceneStateSnapshot(state, scene.state)
+        return applySceneStateSnapshot(state, sceneState)
       }),
 
       startSceneEdit: (id) => set((state) => {
         const scene = (state.scenes || []).find((entry) => String(entry.id) === String(id))
-        if (!scene?.state) return {}
+        const sceneState = getDraftAwareSceneState(scene, {
+          activeSceneId: getActiveAuthoredSceneId(state),
+          activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
+        })
+        if (!sceneState) return {}
 
-        const originalLiveState = state.sceneEditor?.originalLiveState || createSceneStateSnapshot(state)
+        const originalLiveState = getActiveSceneEditorOriginalLiveState(state) || createSceneStateSnapshot(state)
 
         return {
-          ...applySceneStateSnapshot(state, scene.state),
-          sceneEditor: {
+          sceneEditor: createSceneEditorSession({
             activeSceneId: scene.id,
             originalLiveState,
-          },
+            mode: 'library',
+            draftState: cloneProjectData(sceneState),
+          }),
         }
       }),
 
       stopSceneEdit: (options = {}) => set((state) => {
-        const activeSceneId = state.sceneEditor?.activeSceneId
+        const activeSceneId = getActiveAuthoredSceneId(state)
         if (!activeSceneId) return {}
 
         const restoreLive = options.restoreLive !== false
-        const originalLiveState = state.sceneEditor?.originalLiveState
+        const originalLiveState = getActiveSceneEditorOriginalLiveState(state)
+        const draftState = getEffectiveAuthoredSceneState(state)
         const nextState = restoreLive && originalLiveState
           ? applySceneStateSnapshot(state, originalLiveState)
-          : {}
+          : applySceneStateSnapshot(state, draftState)
 
         return {
           ...nextState,
-          sceneEditor: {
-            activeSceneId: null,
-            originalLiveState: null,
-          },
+          sceneEditor: clearSceneEditorSession(),
         }
       }),
 
       deleteScene: (id) => set((state) => ({
         scenes: (state.scenes || []).filter((scene) => String(scene.id) !== String(id)),
-        sceneEditor: state.sceneEditor?.activeSceneId && String(state.sceneEditor.activeSceneId) === String(id)
-          ? {
-            activeSceneId: null,
-            originalLiveState: null,
-          }
+        sceneEditor: getActiveAuthoredSceneId(state) && String(getActiveAuthoredSceneId(state)) === String(id)
+          ? clearSceneEditorSession()
           : state.sceneEditor,
         projection: {
           ...state.projection,
@@ -801,6 +1285,78 @@ export const useStore = create(
             surfaces: (state.projection.surfaces || []).map((surface) => (
               surface.id === targetSurfaceId
                 ? { ...surface, sourceMode: 'scene', sourceId: targetScene.id }
+                : surface
+            )),
+          },
+        }
+      }),
+
+      assignProjectionSurfaceSource: (surfaceId, sourceMode, sourceId, options = {}) => set((state) => {
+        const targetSurfaceId = surfaceId || state.projection.selectedSurfaceId
+        if (!targetSurfaceId) return {}
+
+        if (sourceMode === 'live' || !sourceMode) {
+          return {
+            projection: {
+              ...state.projection,
+              selectedSurfaceId: targetSurfaceId,
+              surfaces: (state.projection.surfaces || []).map((surface) => (
+                surface.id === targetSurfaceId
+                  ? { ...surface, sourceMode: 'live', sourceId: 'live' }
+                  : surface
+              )),
+            },
+          }
+        }
+
+        if (sourceMode === 'scene') {
+          const targetScene = (state.scenes || []).find((scene) => String(scene.id) === String(sourceId))
+          if (!targetScene) return {}
+
+          return {
+            projection: {
+              ...state.projection,
+              selectedSurfaceId: targetSurfaceId,
+              surfaces: (state.projection.surfaces || []).map((surface) => (
+                surface.id === targetSurfaceId
+                  ? { ...surface, sourceMode: 'scene', sourceId: targetScene.id }
+                  : surface
+              )),
+            },
+          }
+        }
+
+        if (['media', 'builtin', 'user'].includes(sourceMode)) {
+          const sceneRecord = createProjectionSceneRecordFromSource(
+            state,
+            sourceMode,
+            sourceId,
+            options.sceneName || null
+          )
+
+          if (!sceneRecord) return {}
+
+          return {
+            scenes: [...(state.scenes || []), sceneRecord.nextScene],
+            projection: {
+              ...state.projection,
+              selectedSurfaceId: targetSurfaceId,
+              surfaces: (state.projection.surfaces || []).map((surface) => (
+                surface.id === targetSurfaceId
+                  ? { ...surface, sourceMode: 'scene', sourceId: sceneRecord.sceneId }
+                  : surface
+              )),
+            },
+          }
+        }
+
+        return {
+          projection: {
+            ...state.projection,
+            selectedSurfaceId: targetSurfaceId,
+            surfaces: (state.projection.surfaces || []).map((surface) => (
+              surface.id === targetSurfaceId
+                ? { ...surface, sourceMode, sourceId }
                 : surface
             )),
           },
@@ -863,42 +1419,44 @@ export const useStore = create(
         animation: { ...state.animation, [key]: value }
       })),
 
-      setTransform: (key, value) => set((state) => ({
-        transforms: { ...state.transforms, [key]: value }
+      setTransform: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+        transforms: { ...getEffectiveSceneSection(state, 'transforms'), [key]: value }
       })),
 
-      setSymmetry: (key, value) => set((state) => ({
-        symmetry: { ...state.symmetry, [key]: value }
+      setSymmetry: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+        symmetry: { ...getEffectiveSceneSection(state, 'symmetry'), [key]: value }
       })),
 
-      setWarp: (key, value) => set((state) => ({
-        warp: { ...state.warp, [key]: value }
+      setWarp: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+        warp: { ...getEffectiveSceneSection(state, 'warp'), [key]: value }
       })),
 
-      setDisplacement: (key, value) => set((state) => ({
-        displacement: { ...state.displacement, [key]: value }
+      setDisplacement: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+        displacement: { ...getEffectiveSceneSection(state, 'displacement'), [key]: value }
       })),
 
       setRecording: (key, value) => set((state) => ({
         recording: { ...state.recording, [key]: value }
       })),
 
-      setTiling: (key, value) => set((state) => ({
-        tiling: { ...state.tiling, [key]: value }
+      setTiling: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+        tiling: { ...getEffectiveSceneSection(state, 'tiling'), [key]: value }
       })),
 
       setColor: (key, value) => {
-        set((state) => ({
-          color: { ...state.color, [key]: value }
+        set((state) => withActiveSceneSnapshot(state, {
+          color: { ...getEffectiveSceneSection(state, 'color'), [key]: value }
         }))
       },
 
-      setEffect: (key, value) => set((state) => ({
-        effects: { ...state.effects, [key]: value }
+      setEffect: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+        effects: { ...getEffectiveSceneSection(state, 'effects'), [key]: value }
       })),
 
       setGenerator: (key, value) => {
-        set((state) => ({ generator: { ...state.generator, [key]: value } }))
+        set((state) => withActiveSceneSnapshot(state, {
+          generator: { ...getEffectiveSceneSection(state, 'generator'), [key]: value }
+        }))
       },
 
       setCanvas: (key, value) => set((state) => ({
@@ -1298,7 +1856,7 @@ export const useStore = create(
           }
         }
 
-        return {
+        const mergedState = {
           ...currentState,
           ...persistedState,
           schemaVersion: SCHEMA_VERSION,
@@ -1318,6 +1876,8 @@ export const useStore = create(
           color: { ...currentState.color, ...(persistedState?.color || {}) },
           projection: { ...currentState.projection, ...(persistedState?.projection || {}) },
         }
+
+        return normalizeProjectionSourcesInState(mergedState)
       },
     }
   )

@@ -488,6 +488,11 @@ describe('Zustand Store', () => {
 
     expect(state.scenes).toHaveLength(1)
     expect(state.scenes[0].state.generator.type).toBe('plasma')
+    expect(state.scenes[0].origin).toMatchObject({
+      type: 'live',
+      sourceId: 'live',
+      label: 'LIVE OUTPUT',
+    })
     expect(state.projection.surfaces[0].sourceMode).toBe('scene')
     expect(state.projection.surfaces[0].sourceId).toBe(sceneId)
 
@@ -514,10 +519,37 @@ describe('Zustand Store', () => {
 
     state = useStore.getState()
     expect(state.sceneEditor.activeSceneId).toBe(sceneId)
-    expect(state.generator.type).toBe('grid')
+    expect(state.sceneEditor.mode).toBe('library')
+    expect(state.sceneEditor.hasLocalEdits).toBe(false)
+    expect(state.sceneEditor.draftState.generator.type).toBe('grid')
+    expect(state.generator.type).toBe('voronoi')
 
     act(() => {
       setGenerator('type', 'liquid')
+    })
+
+    state = useStore.getState()
+    expect(state.scenes[0].state.generator.type).toBe('liquid')
+    expect(state.sceneEditor.hasLocalEdits).toBe(true)
+    expect(state.sceneEditor.draftState.generator.type).toBe('liquid')
+    expect(state.generator.type).toBe('voronoi')
+
+    act(() => {
+      loadSceneToLive(sceneId)
+    })
+
+    state = useStore.getState()
+    expect(state.generator.type).toBe('liquid')
+
+    act(() => {
+      captureSceneState(sceneId)
+    })
+
+    state = useStore.getState()
+    expect(state.sceneEditor.hasLocalEdits).toBe(false)
+    expect(state.sceneEditor.draftState.generator.type).toBe('liquid')
+
+    act(() => {
       stopSceneEdit({ restoreLive: true })
     })
 
@@ -552,6 +584,10 @@ describe('Zustand Store', () => {
 
     state = useStore.getState()
     expect(state.scenes).toHaveLength(2)
+    expect(state.scenes[1].origin).toMatchObject({
+      type: 'scene',
+      sourceId: sceneId,
+    })
     expect(state.projection.surfaces[0].sourceId).toBe(sceneId)
     expect(state.projection.surfaces[1].sourceId).not.toBe(sceneId)
     expect(state.projection.surfaces[1].sourceMode).toBe('scene')
@@ -567,6 +603,70 @@ describe('Zustand Store', () => {
     expect(state.projection.surfaces[0].sourceMode).toBe('live')
     expect(state.projection.surfaces[0].sourceId).toBe('live')
     expect(state.projection.surfaces[1].sourceMode).toBe('scene')
+  })
+
+  it('should treat media, built-in, and user surface assignments as scene shortcuts', () => {
+    const {
+      addProjectionSurface,
+      addMediaAsset,
+      saveUserPreset,
+      setGenerator,
+      assignProjectionSurfaceSource,
+    } = useStore.getState()
+
+    act(() => {
+      addProjectionSurface('Shortcut Surface')
+      addMediaAsset({ id: 'asset-a', type: 'image', src: 'file:///a.png', name: 'Alpha' })
+      setGenerator('type', 'plasma')
+      saveUserPreset('Preset A')
+    })
+
+    act(() => {
+      assignProjectionSurfaceSource(useStore.getState().projection.selectedSurfaceId, 'media', 'asset-a')
+    })
+
+    let state = useStore.getState()
+    expect(state.scenes).toHaveLength(1)
+    expect(state.scenes[0].name).toBe('Alpha Scene')
+    expect(state.scenes[0].state.media.name).toBe('Alpha')
+    expect(state.scenes[0].state.generator.type).toBe('none')
+    expect(state.scenes[0].origin).toMatchObject({
+      type: 'media',
+      sourceId: 'asset-a',
+      mediaName: 'Alpha',
+    })
+    expect(state.projection.surfaces[0].sourceMode).toBe('scene')
+    expect(state.projection.surfaces[0].sourceId).toBe(state.scenes[0].id)
+
+    act(() => {
+      assignProjectionSurfaceSource(useStore.getState().projection.selectedSurfaceId, 'builtin', '0')
+    })
+
+    state = useStore.getState()
+    expect(state.scenes).toHaveLength(2)
+    expect(state.scenes[1].name).toMatch(/scene/i)
+    expect(state.scenes[1].origin).toMatchObject({
+      type: 'builtin',
+      sourceId: '0',
+    })
+    expect(state.projection.surfaces[0].sourceMode).toBe('scene')
+    expect(state.projection.surfaces[0].sourceId).toBe(state.scenes[1].id)
+
+    const userPresetId = String(state.userPresets[0].id)
+    act(() => {
+      assignProjectionSurfaceSource(useStore.getState().projection.selectedSurfaceId, 'user', userPresetId)
+    })
+
+    state = useStore.getState()
+    expect(state.scenes).toHaveLength(3)
+    expect(state.scenes[2].name).toBe('Preset A Scene')
+    expect(state.scenes[2].origin).toMatchObject({
+      type: 'user',
+      sourceId: userPresetId,
+      presetName: 'Preset A',
+    })
+    expect(state.projection.surfaces[0].sourceMode).toBe('scene')
+    expect(state.projection.surfaces[0].sourceId).toBe(state.scenes[2].id)
   })
 
   it('should export and import project documents with stable project state only', () => {
@@ -603,7 +703,11 @@ describe('Zustand Store', () => {
 
     const exported = exportProjectData()
     expect(exported.type).toBe('lumenlab-project')
-    expect(exported.project.liveState.generator.type).toBe('grid')
+    expect(exported.project.liveState.generator.type).toBe('plasma')
+    expect(exported.project.layout.projection.surfaces[0].sourceMode).toBe('scene')
+    expect(exported.project.sources.scenes).toHaveLength(1)
+    expect(exported.project.sources.scenes[0].state.generator.type).toBe('grid')
+    expect(exported.project.lookPresets.userPresets).toHaveLength(1)
     expect(exported.project.scenes).toHaveLength(1)
     expect(exported.project.userPresets).toHaveLength(1)
     expect(exported.project.projection.surfaces[0].sourceMode).toBe('scene')
@@ -617,7 +721,7 @@ describe('Zustand Store', () => {
     })
 
     state = useStore.getState()
-    expect(state.generator.type).toBe('grid')
+    expect(state.generator.type).toBe('plasma')
     expect(state.mediaLibrary[0].name).toBe('Alpha')
     expect(state.scenes).toHaveLength(1)
     expect(state.userPresets).toHaveLength(1)
@@ -629,6 +733,291 @@ describe('Zustand Store', () => {
     expect(state.ui.helpOpen).toBe(false)
   })
 
+  it('normalizes legacy imported surface sources into reusable scenes', () => {
+    const imported = {
+      type: 'lumenlab-project',
+      project: {
+        liveState: {
+          transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+          symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+          warp: { type: 'none' },
+          displacement: { amp: 0, freq: 10 },
+          tiling: { type: 'none', scale: 1 },
+          color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+          effects: {
+            edgeDetect: 0,
+            invert: 0,
+            solarize: 0,
+            shift: 0,
+            bloom: 0,
+            chromaticAberration: 0,
+            noise: 0,
+          },
+          generator: {
+            type: 'voronoi',
+            param1: 50,
+            param2: 50,
+            param3: 50,
+            isAnimated: true,
+          },
+          media: null,
+          activeMediaId: null,
+        },
+        mediaLibrary: [
+          { id: 'asset-a', type: 'image', src: 'file:///a.png', name: 'Alpha' },
+        ],
+        projection: {
+          enabled: true,
+          selectedSurfaceId: 'surface-1',
+          surfaces: [
+            {
+              id: 'surface-1',
+              name: 'Media Surface',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'media',
+              sourceId: 'asset-a',
+              points: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+              maskPoints: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+            },
+            {
+              id: 'surface-2',
+              name: 'Preset Surface',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'builtin',
+              sourceId: '0',
+              points: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+              maskPoints: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+            },
+          ],
+        },
+        scenes: [],
+        userPresets: [],
+        canvas: { width: 1920, height: 1080, aspect: 'video', fit: 'contain', shape: 'rectangle' },
+      },
+    }
+
+    act(() => {
+      useStore.getState().resetAll()
+      useStore.getState().importProjectData(imported)
+    })
+
+    const state = useStore.getState()
+    expect(state.scenes).toHaveLength(2)
+    expect(state.projection.surfaces[0].sourceMode).toBe('scene')
+    expect(state.projection.surfaces[1].sourceMode).toBe('scene')
+    expect(state.scenes[0].origin).toMatchObject({
+      type: 'media',
+      sourceId: 'asset-a',
+      mediaName: 'Alpha',
+    })
+    expect(state.scenes[1].origin).toMatchObject({
+      type: 'builtin',
+      sourceId: '0',
+    })
+  })
+
+  it('imports structured project documents with explicit layout, sources, and look preset sections', () => {
+    const imported = {
+      type: 'lumenlab-project',
+      project: {
+        layout: {
+          canvas: {
+            width: 1280,
+            height: 720,
+            aspect: 'video',
+            fit: 'contain',
+            shape: 'rectangle',
+          },
+          projection: {
+            enabled: true,
+            selectedSurfaceId: 'surface-1',
+            surfaces: [{
+              id: 'surface-1',
+              name: 'Structured Surface',
+              visible: true,
+              opacity: 1,
+              blendMode: 'screen',
+              sourceMode: 'live',
+              sourceId: 'live',
+              points: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+              maskPoints: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+            }],
+          },
+        },
+        sources: {
+          mediaLibrary: [{
+            id: 'asset-a',
+            type: 'image',
+            src: 'file:///a.png',
+            name: 'Alpha',
+          }],
+          scenes: [{
+            id: 'scene-1',
+            name: 'Structured Scene',
+            state: {
+              transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+              symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+              warp: { type: 'none' },
+              displacement: { amp: 0, freq: 10 },
+              tiling: { type: 'none', scale: 1 },
+              color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+              effects: {
+                edgeDetect: 0,
+                invert: 0,
+                solarize: 0,
+                shift: 0,
+                bloom: 0,
+                chromaticAberration: 0,
+                noise: 0,
+              },
+              generator: {
+                type: 'plasma',
+                param1: 50,
+                param2: 50,
+                param3: 50,
+                isAnimated: true,
+              },
+              media: null,
+              activeMediaId: null,
+            },
+            origin: { type: 'live', sourceId: 'live', label: 'LIVE OUTPUT' },
+          }],
+        },
+        lookPresets: {
+          userPresets: [{
+            id: 101,
+            name: 'Look A',
+            state: {
+              transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+              symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+              warp: { type: 'none' },
+              displacement: { amp: 0, freq: 10 },
+              tiling: { type: 'none', scale: 1 },
+              color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+              effects: {
+                edgeDetect: 0,
+                invert: 0,
+                solarize: 0,
+                shift: 0,
+                bloom: 0,
+                chromaticAberration: 0,
+                noise: 0,
+              },
+              generator: {
+                type: 'none',
+                param1: 50,
+                param2: 50,
+                param3: 50,
+                isAnimated: true,
+              },
+              media: null,
+              activeMediaId: null,
+            },
+          }],
+          snapshots: [{
+            id: 1,
+            transforms: { x: 1, y: 2, scale: 1, rotation: 0 },
+            symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+            warp: { type: 'none' },
+            displacement: { amp: 0, freq: 10 },
+            tiling: { type: 'none', scale: 1 },
+            color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+            effects: {
+              edgeDetect: 0,
+              invert: 0,
+              solarize: 0,
+              shift: 0,
+              bloom: 0,
+              chromaticAberration: 0,
+              noise: 0,
+            },
+            generator: {
+              type: 'plasma',
+              param1: 50,
+              param2: 50,
+              param3: 50,
+              isAnimated: true,
+            },
+          }],
+        },
+        liveState: {
+          transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+          symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+          warp: { type: 'none' },
+          displacement: { amp: 0, freq: 10 },
+          tiling: { type: 'none', scale: 1 },
+          color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+          effects: {
+            edgeDetect: 0,
+            invert: 0,
+            solarize: 0,
+            shift: 0,
+            bloom: 0,
+            chromaticAberration: 0,
+            noise: 0,
+          },
+          generator: {
+            type: 'voronoi',
+            param1: 50,
+            param2: 50,
+            param3: 50,
+            isAnimated: true,
+          },
+          media: null,
+          activeMediaId: null,
+        },
+      },
+    }
+
+    act(() => {
+      useStore.getState().resetAll()
+      useStore.getState().importProjectData(imported)
+    })
+
+    const state = useStore.getState()
+    expect(state.canvas.width).toBe(1280)
+    expect(state.mediaLibrary).toHaveLength(1)
+    expect(state.scenes).toHaveLength(1)
+    expect(state.userPresets).toHaveLength(1)
+    expect(state.snapshots).toHaveLength(1)
+    expect(state.projection.surfaces[0].sourceMode).toBe('live')
+    expect(state.generator.type).toBe('voronoi')
+  })
+
   it('should capture a selected projection surface source into a reusable scene', () => {
     const {
       addProjectionSurface,
@@ -636,6 +1025,7 @@ describe('Zustand Store', () => {
       updateProjectionSurface,
       setGenerator,
       setColor,
+      authorProjectionSurfaceScene,
       captureProjectionSurfaceAsScene,
       startProjectionSurfaceSceneEdit,
     } = useStore.getState()
@@ -654,6 +1044,11 @@ describe('Zustand Store', () => {
     expect(state.scenes[0].state.media.name).toBe('Alpha')
     expect(state.scenes[0].state.generator.type).toBe('none')
     expect(state.scenes[0].state.color.hue).toBeCloseTo(0.35)
+    expect(state.scenes[0].origin).toMatchObject({
+      type: 'media',
+      sourceId: 'asset-a',
+      capturedFromSurfaceName: 'Media Surface',
+    })
     expect(state.projection.surfaces[0].sourceMode).toBe('scene')
     expect(state.projection.surfaces[0].sourceId).toBe(state.scenes[0].id)
 
@@ -668,8 +1063,177 @@ describe('Zustand Store', () => {
     const editedState = useStore.getState()
     expect(editedState.scenes).toHaveLength(1)
     expect(editedState.sceneEditor.activeSceneId).toBe(editedState.scenes[0].id)
-    expect(editedState.generator.type).not.toBe('liquid')
+    expect(editedState.sceneEditor.mode).toBe('surface')
+    expect(editedState.sceneEditor.sourceSurfaceName).toBe('Preset Surface')
+    expect(editedState.sceneEditor.draftState.generator.type).not.toBe('liquid')
+    expect(editedState.generator.type).toBe('liquid')
     expect(editedState.projection.surfaces[0].sourceMode).toBe('scene')
+
+    act(() => {
+      useStore.getState().resetAll()
+      addProjectionSurface('Shared Surface A')
+      addProjectionSurface('Shared Surface B')
+    })
+
+    let nextState = useStore.getState()
+    const firstSurfaceId = nextState.projection.surfaces[0].id
+    const secondSurfaceId = nextState.projection.surfaces[1].id
+
+    act(() => {
+      updateProjectionSurface(firstSurfaceId, { sourceMode: 'scene', sourceId: 'scene-shared' })
+      updateProjectionSurface(secondSurfaceId, { sourceMode: 'scene', sourceId: 'scene-shared' })
+      useStore.setState({
+        scenes: [{
+          id: 'scene-shared',
+          name: 'Shared Scene',
+          state: {
+            transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+            symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+            warp: { type: 'none' },
+            displacement: { amp: 0, freq: 10 },
+            tiling: { type: 'none', scale: 1 },
+            color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+            effects: {
+              edgeDetect: 0,
+              invert: 0,
+              solarize: 0,
+              shift: 0,
+              bloom: 0,
+              chromaticAberration: 0,
+              noise: 0,
+            },
+            generator: {
+              type: 'plasma',
+              param1: 50,
+              param2: 50,
+              param3: 50,
+              isAnimated: true,
+            },
+            media: null,
+            activeMediaId: null,
+          },
+          origin: { type: 'live', sourceId: 'live', label: 'LIVE OUTPUT' },
+        }],
+        projection: {
+          ...useStore.getState().projection,
+          selectedSurfaceId: secondSurfaceId,
+        },
+      })
+      authorProjectionSurfaceScene(secondSurfaceId)
+    })
+
+    nextState = useStore.getState()
+    expect(nextState.scenes).toHaveLength(2)
+    expect(nextState.projection.surfaces[0].sourceId).toBe('scene-shared')
+    expect(nextState.projection.surfaces[1].sourceId).not.toBe('scene-shared')
+    expect(nextState.sceneEditor.activeSceneId).toBe(nextState.projection.surfaces[1].sourceId)
+    expect(nextState.sceneEditor.mode).toBe('surface')
+    expect(nextState.sceneEditor.sourceSurfaceId).toBe(secondSurfaceId)
+  })
+
+  it('captures the active authored draft when converting a scene surface into a reusable scene', () => {
+    act(() => {
+      useStore.setState({
+        projection: {
+          ...useStore.getState().projection,
+          enabled: true,
+          selectedSurfaceId: 'surface-1',
+          surfaces: [{
+            id: 'surface-1',
+            name: 'Surface 1',
+            visible: true,
+            opacity: 1,
+            blendMode: 'screen',
+            sourceMode: 'scene',
+            sourceId: 'scene-1',
+            points: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+              { x: 1, y: 1 },
+              { x: 0, y: 1 },
+            ],
+            maskPoints: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+              { x: 1, y: 1 },
+              { x: 0, y: 1 },
+            ],
+          }],
+        },
+        scenes: [{
+          id: 'scene-1',
+          name: 'Scene 1',
+          state: {
+            transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+            symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+            warp: { type: 'none' },
+            displacement: { amp: 0, freq: 10 },
+            tiling: { type: 'none', scale: 1 },
+            color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+            effects: {
+              edgeDetect: 0,
+              invert: 0,
+              solarize: 0,
+              shift: 0,
+              bloom: 0,
+              chromaticAberration: 0,
+              noise: 0,
+            },
+            generator: {
+              type: 'plasma',
+              param1: 50,
+              param2: 50,
+              param3: 50,
+              isAnimated: true,
+            },
+            media: null,
+            activeMediaId: null,
+          },
+        }],
+        sceneEditor: {
+          activeSceneId: 'scene-1',
+          originalLiveState: null,
+          mode: 'surface',
+          sourceSurfaceId: 'surface-1',
+          sourceSurfaceName: 'Surface 1',
+          hasLocalEdits: true,
+          draftState: {
+            transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+            symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+            warp: { type: 'none' },
+            displacement: { amp: 0, freq: 10 },
+            tiling: { type: 'none', scale: 1 },
+            color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+            effects: {
+              edgeDetect: 0,
+              invert: 0,
+              solarize: 0,
+              shift: 0,
+              bloom: 0,
+              chromaticAberration: 0,
+              noise: 0,
+            },
+            generator: {
+              type: 'liquid',
+              param1: 50,
+              param2: 50,
+              param3: 50,
+              isAnimated: true,
+            },
+            media: null,
+            activeMediaId: null,
+          },
+        },
+      })
+    })
+
+    act(() => {
+      useStore.getState().captureProjectionSurfaceAsScene('surface-1')
+    })
+
+    const state = useStore.getState()
+    expect(state.scenes).toHaveLength(2)
+    expect(state.scenes[1].state.generator.type).toBe('liquid')
   })
 
   it('should add and remove mask points on a projection surface', () => {

@@ -1,5 +1,5 @@
 import React from 'react'
-import { useStore } from '../../store/useStore'
+import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
 
@@ -34,21 +34,24 @@ export const SectionGeometry = React.memo(function SectionGeometry({ onInteract 
     displacementAmp, warpType, tilingType,
     setSymmetry, setTransform, setWarp, setDisplacement, setTiling,
   } = useStore(
-    useShallow((s) => ({
-      symmetryEnabled:    s.symmetry.enabled,
-      symmetrySlices:     s.symmetry.slices,
-      transformsRotation: s.transforms.rotation,
-      transformsX:        s.transforms.x,
-      transformsY:        s.transforms.y,
-      displacementAmp:    s.displacement.amp,
-      warpType:           s.warp.type,
-      tilingType:         s.tiling.type,
-      setSymmetry:        s.setSymmetry,
-      setTransform:       s.setTransform,
-      setWarp:            s.setWarp,
-      setDisplacement:    s.setDisplacement,
-      setTiling:          s.setTiling,
-    }))
+    useShallow((s) => {
+      const effectiveSceneState = getEffectiveAuthoredSceneState(s)
+      return {
+        symmetryEnabled: effectiveSceneState.symmetry.enabled,
+        symmetrySlices: effectiveSceneState.symmetry.slices,
+        transformsRotation: effectiveSceneState.transforms.rotation,
+        transformsX: effectiveSceneState.transforms.x,
+        transformsY: effectiveSceneState.transforms.y,
+        displacementAmp: effectiveSceneState.displacement.amp,
+        warpType: effectiveSceneState.warp.type,
+        tilingType: effectiveSceneState.tiling.type,
+        setSymmetry: s.setSymmetry,
+        setTransform: s.setTransform,
+        setWarp: s.setWarp,
+        setDisplacement: s.setDisplacement,
+        setTiling: s.setTiling,
+      }
+    })
   )
 
   function wrap(fn) {

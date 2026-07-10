@@ -4,7 +4,7 @@ import './App.css'
 const featureGroups = [
   {
     title: 'Generate',
-    items: ['Fibonacci', 'Voronoi', 'Grid', 'Liquid', 'Plasma'],
+    items: ['Fibonacci', 'Voronoi', 'Grid', 'Liquid', 'Plasma', 'Fractal'],
   },
   {
     title: 'Shape',
@@ -23,14 +23,14 @@ const platformCards = [
     copy: 'The full Electron performance rig with projection mapping, capture, presets, and hardware control.',
   },
   {
-    label: 'Web PWA',
-    status: 'In progress',
-    copy: 'A self-hosted browser-native version built for quick sharing, offline play, and touch-first control.',
+    label: 'Web',
+    status: 'Product home',
+    copy: 'Downloads, beta news, and a showcase for the living visuals you can shape across Lumen Lab.',
   },
   {
     label: 'Mobile',
-    status: 'Planned',
-    copy: 'A compact camera and touch instrument for iOS and Android once the shared core lands.',
+    status: 'Android beta in development',
+    copy: 'A standalone visual toy: touch, tilt, mutate, and export seamless four-second loops. No desktop required.',
   },
 ]
 
@@ -123,7 +123,7 @@ function App() {
       <section className="platform-section" id="platforms" aria-labelledby="platform-title">
         <div className="section-heading">
           <p className="eyebrow">Roadmap</p>
-          <h2 id="platform-title">One engine across stage, web, and mobile.</h2>
+          <h2 id="platform-title">One creative family, built for different kinds of play.</h2>
         </div>
         <div className="platform-grid">
           {platformCards.map((card) => (

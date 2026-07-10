@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useStore } from '../store/useStore'
+import { getEffectiveAuthoredSceneState, useStore } from '../store/useStore'
 
 export function useGamepad(enabled = true) {
   const requestRef = useRef()
@@ -17,6 +17,7 @@ export function useGamepad(enabled = true) {
     if (!enabled) return undefined
     const scanGamepads = () => {
       const store = useStore.getState()
+      const effectiveSceneState = getEffectiveAuthoredSceneState(store)
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : []
       if (!gamepads) return
 
@@ -51,19 +52,19 @@ export function useGamepad(enabled = true) {
       // Let's go with DELTA for transforms to allow fine tuning, but maybe faster speed.
 
       if (lx !== 0 || ly !== 0) {
-        store.setTransform('x', store.transforms.x + lx * 2)
-        store.setTransform('y', store.transforms.y - ly * 2) // Invert Y natural feel
+        store.setTransform('x', effectiveSceneState.transforms.x + lx * 2)
+        store.setTransform('y', effectiveSceneState.transforms.y - ly * 2) // Invert Y natural feel
       }
 
       if (rx !== 0) {
         // Rotation
-        store.setTransform('rotation', store.transforms.rotation + rx * 0.05)
+        store.setTransform('rotation', effectiveSceneState.transforms.rotation + rx * 0.05)
       }
 
       if (ry !== 0) {
         // Log-style Zoom (scale)
         const scaleDelta = ry * 0.02
-        store.setTransform('scale', Math.max(0.1, store.transforms.scale - scaleDelta))
+        store.setTransform('scale', Math.max(0.1, effectiveSceneState.transforms.scale - scaleDelta))
       }
 
       // --- TRIGGERS (Often mapped to Buttons 6 & 7 in API, acts as axes 0-1) ---
@@ -118,6 +119,7 @@ export function useGamepad(enabled = true) {
 }
 
 function handleButtonPress(index, store) {
+  const effectiveSceneState = getEffectiveAuthoredSceneState(store)
   // console.log("Button Pressed:", index)
 
   switch (index) {
@@ -125,10 +127,10 @@ function handleButtonPress(index, store) {
       store.setAnimation('isPlaying', !store.animation.isPlaying)
       break
     case 1: // B - Toggle Symmetry
-      store.setSymmetry('enabled', !store.symmetry.enabled)
+      store.setSymmetry('enabled', !effectiveSceneState.symmetry.enabled)
       break
     case 2: { // X - Toggle Invert
-      const isInverted = store.effects.invert > 0
+      const isInverted = effectiveSceneState.effects.invert > 0
       store.setEffect('invert', isInverted ? 0 : 100)
       break
     }
@@ -162,7 +164,7 @@ function handleButtonPress(index, store) {
 
 const GENERATORS = ['fibonacci', 'voronoi', 'grid', 'liquid', 'plasma', 'fractal']
 function cycleGenerator(store, dir) {
-  const current = store.generator.type
+  const current = getEffectiveAuthoredSceneState(store).generator.type
   let idx = GENERATORS.indexOf(current)
   if (idx === -1) idx = 0
 
@@ -172,7 +174,7 @@ function cycleGenerator(store, dir) {
 
 const SYMMETRIES = ['radial', 'mirrorX', 'mirrorY']
 function cycleSymmetry(store, dir) {
-  const current = store.symmetry.type
+  const current = getEffectiveAuthoredSceneState(store).symmetry.type
   let idx = SYMMETRIES.indexOf(current)
   if (idx === -1) idx = 0
 
