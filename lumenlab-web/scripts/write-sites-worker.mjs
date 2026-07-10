@@ -19,8 +19,9 @@ if (!heroPath) {
 const hero = await readFile(`dist${heroPath}`)
 const heroUrl = `data:image/png;base64,${hero.toString('base64')}`
 const standaloneScript = script.replaceAll(heroPath, heroUrl)
+const standaloneScriptBase64 = Buffer.from(standaloneScript).toString('base64')
 const standalonePage = index
-  .replace(`<script type="module" crossorigin src="${scriptPath}"></script>`, `<script>${standaloneScript}</script>`)
+  .replace(`<script type="module" crossorigin src="${scriptPath}"></script>`, `<script>eval(atob('${standaloneScriptBase64}'))</script>`)
   .replace(`<link rel="stylesheet" crossorigin href="${stylePath}">`, `<style>${style}</style>`)
   .replace(/<link rel="manifest"[^>]*><script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/, '')
 
