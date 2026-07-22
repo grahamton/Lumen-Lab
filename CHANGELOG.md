@@ -4,18 +4,15 @@ All notable changes to Lumen Lab are documented here.
 
 ## [Unreleased]
 
-### Changed
-- Projection source messaging now explicitly distinguishes live, independent, and missing surface states
-- Output-panel recovery actions are normalized around `MAKE ALL LIVE` and `RESET MISSING TO LIVE`
-- Hidden-surface state copy is now deterministic and consistent in the selected-surface panel
+## [1.2.0] — 2026-07-22
 
 ### Added
+- Projection mapping with four-corner output warp, calibration handles, test patterns, and blackout
+- Multi-surface output with per-surface warp, masks, opacity, blend modes, and visibility
+- Independent surface sources using built-in generators, media, presets, snapshots, or scenes
+- Dedicated projection window with synchronized app state and audio meters
 - Mixed-stage warning when visible surfaces are split between `LIVE OUTPUT` and independent sources
 - Output-panel regression tests covering mixed-state, no-live, missing-source, and hide/show surface behavior
-
-## [1.1.0] — 2026-04-04
-
-### Added
 - Flat single-panel sidebar replacing 4-tab 929-line Controls.jsx
 - Kaleidoscope toggle with default-on symmetry
 - Drift mode (slow sine/cosine animation on scale + rotation)
@@ -27,6 +24,9 @@ All notable changes to Lumen Lab are documented here.
 - Color works on all generators via additive saturation injection
 
 ### Changed
+- Projection source messaging now explicitly distinguishes live, independent, and missing surface states
+- Output-panel recovery actions are normalized around `MAKE ALL LIVE` and `RESET MISSING TO LIVE`
+- Hidden-surface state copy is now deterministic and consistent in the selected-surface panel
 - BPM control renamed to SPEED (generator animation rate)
 - FLUX renamed to DRIFT
 - Generator speed (param3) exposed as top-strip knob
