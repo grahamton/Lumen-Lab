@@ -13,12 +13,9 @@ app.commandLine.appendSwitch('force_high_performance_gpu')
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
-// WebGPU is on by default on Windows/macOS; Linux needs an explicit opt-in.
-// The renderer falls back to WebGL2 on its own if WebGPU can't start.
-if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('enable-unsafe-webgpu')
-  app.commandLine.appendSwitch('enable-features', 'Vulkan')
-}
+// WebGPU: on by default on Windows/macOS; on Linux Chromium enables it only for
+// known-good drivers. The renderer falls back to WebGL2 everywhere else, and
+// `--force-webgl` skips WebGPU entirely.
 
 const ALLOWED_PERMISSIONS = new Set(['media', 'midi', 'midiSysex', 'fullscreen', 'clipboard-sanitized-write'])
 

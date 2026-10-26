@@ -4,7 +4,7 @@ import './App.css'
 const featureGroups = [
   {
     title: 'Generate',
-    items: ['Fibonacci', 'Voronoi', 'Grid', 'Liquid', 'Plasma', 'Fractal'],
+    items: ['Fibonacci', 'Voronoi', 'Grid', 'Liquid', 'Plasma', 'Your media'],
   },
   {
     title: 'Shape',
@@ -66,7 +66,7 @@ function App() {
               psychedelic, audio-reactive visuals you can shape live and capture at production quality.
             </p>
             <div className="hero-actions" aria-label="Primary actions">
-              <a className="button primary" href="https://github.com/GRAHAMTON/Lumenlab/releases">
+              <a className="button primary" href="https://github.com/grahamton/Lumen-Lab/releases/latest">
                 Download Windows
               </a>
               <a className="button secondary" href="#platforms">
@@ -140,14 +140,14 @@ function App() {
 
       <section className="download-section" id="download" aria-labelledby="download-title">
         <div>
-          <p className="eyebrow">Windows v1.1.0</p>
+          <p className="eyebrow">Windows v1.3.0</p>
           <h2 id="download-title">Start with the desktop rig.</h2>
           <p>
             Download the current Windows build, then bring your own media, projector, controller,
             and audio source.
           </p>
         </div>
-        <a className="button primary" href="https://github.com/GRAHAMTON/Lumenlab/releases">
+        <a className="button primary" href="https://github.com/grahamton/Lumen-Lab/releases/latest">
           Get Lumen Lab
         </a>
       </section>

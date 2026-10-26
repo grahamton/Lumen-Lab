@@ -38,14 +38,39 @@ const TILE_MAP     = { none: 0, p1: 1, p2: 2, p4m: 3 }
 const GEN_MAP      = { none: 0, fibonacci: 1, voronoi: 2, grid: 3, liquid: 4, plasma: 5, fractal: 6 }
 const projectionWindowMode = isProjectionWindow()
 // `?renderer=webgl` forces the WebGL2 backend (troubleshooting escape hatch).
-const forceWebGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl'
+let useWebGLBackend = new URLSearchParams(window.location.search).get('renderer') === 'webgl'
+const MAX_RENDERER_RECOVERIES = 3
+let rendererRecoveries = 0
+const rendererLossListeners = new Set()
+
+// A lost GPU device (driver reset, unplugged eGPU, unsupported Linux stack)
+// stops rendering for good, so remount the canvases; after a WebGPU loss the
+// rest of the session uses WebGL2.
+function handleRendererLoss(info) {
+  console.warn(`[Lumen Lab] ${info?.api ?? 'GPU'} device lost: ${info?.message ?? 'unknown reason'}`)
+  if (rendererRecoveries >= MAX_RENDERER_RECOVERIES) return
+  rendererRecoveries += 1
+  if (info?.api === 'WebGPU') useWebGLBackend = true
+  rendererLossListeners.forEach((listener) => listener())
+}
+
+function useRendererGeneration() {
+  const [generation, setGeneration] = useState(0)
+  useEffect(() => {
+    const listener = () => setGeneration((value) => value + 1)
+    rendererLossListeners.add(listener)
+    return () => rendererLossListeners.delete(listener)
+  }, [])
+  return generation
+}
 
 // WebGPU first; three falls back to its WebGL2 backend when WebGPU is unavailable.
 async function createRenderer(defaults) {
-  const renderer = new WebGPURenderer({ ...defaults, antialias: false, forceWebGL })
+  const renderer = new WebGPURenderer({ ...defaults, antialias: false, forceWebGL: useWebGLBackend })
+  renderer.onDeviceLost = handleRendererLoss
   await renderer.init()
   if (!renderer.backend.isWebGPUBackend) {
-    console.info('[Lumen Lab] WebGPU unavailable, rendering with the WebGL2 backend')
+    console.info('[Lumen Lab] Rendering with the WebGL2 backend')
   }
   return renderer
 }
@@ -140,6 +165,7 @@ function ProjectionPatternStage({ blackout, patternMode, patternType }) {
 }
 
 function ProjectionSourceCanvas({ sourceKey, renderStateResolver, mediaDescriptor, width, height, dpr, onCanvasReady }) {
+  const rendererGeneration = useRendererGeneration()
   useEffect(() => {
     return () => {
       onCanvasReady(sourceKey, null)
@@ -159,6 +185,7 @@ function ProjectionSourceCanvas({ sourceKey, renderStateResolver, mediaDescripto
       }}
     >
       <Canvas
+        key={rendererGeneration}
         gl={createRenderer}
         flat
         dpr={dpr}
@@ -638,6 +665,7 @@ export function CanvasGL() {
     }))
   )
   const [sourceCanvasElement, setSourceCanvasElement] = useState(null)
+  const rendererGeneration = useRendererGeneration()
   const [auxSourceCanvases, setAuxSourceCanvases] = useState({})
 
   const [viewport, setViewport] = useState(() => ({
@@ -765,6 +793,7 @@ export function CanvasGL() {
           }}
         >
           <Canvas
+            key={rendererGeneration}
             gl={createRenderer}
             flat
             dpr={lowResPreview ? 0.75 : undefined}

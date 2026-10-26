@@ -24,6 +24,8 @@ All notable changes to Lumen Lab are documented here.
 - Microphone stayed open (and the OS indicator stayed on) after disabling audio
 - Projection window overwrote saved snapshots and MIDI mappings on close
 - Saving re-serialized the whole state (including inline media) on every change
+- Recording captured no frames from the WebGPU canvas; it now records a mirror fed by the render loop
+- Landing page: download links, version, favicon, and PWA icons
 
 ### Security
 - Navigation away from the app and new windows are blocked; external links open in the browser
@@ -32,6 +34,8 @@ All notable changes to Lumen Lab are documented here.
 - Removed `unsafe-eval` from the CSP
 
 ### Added
+- Recovery from GPU device loss: canvases remount automatically, switching to WebGL2 after a WebGPU loss
+- `--force-webgl` launch flag (or `LUMEN_RENDERER=webgl`) to skip WebGPU on problem machines
 - App icon set
 - CI (lint, test, build) and a tag-driven release workflow for Windows, macOS, and Linux
 
