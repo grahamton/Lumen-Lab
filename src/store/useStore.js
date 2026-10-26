@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
 import { CONTROLS } from '../config/uiConfig'
+import { isProjectionWindow } from '../utils/windowMode'
 import { presets } from '../presets'
 import {
   getDraftAwareSceneState,
@@ -1811,16 +1812,24 @@ export const useStore = create(
     }),
     {
       name: 'lumen-storage',
-      storage: createJSONStorage(() => {
-        const debouncedSetItem = debounce((key, value) => localStorage.setItem(key, value), 500)
+      // Serialization runs inside the debounce: stringifying the whole state
+      // (media data URLs included) on every set() janks the render loop.
+      // The projection window mirrors the main window and never writes.
+      storage: (() => {
+        const debouncedSetItem = debounce((key, value) => localStorage.setItem(key, JSON.stringify(value)), 500)
         flushPersist = () => debouncedSetItem.flush()
-        window.addEventListener('beforeunload', () => debouncedSetItem.flush(), { once: true })
+        if (typeof window !== 'undefined') {
+          window.addEventListener('beforeunload', () => debouncedSetItem.flush(), { once: true })
+        }
         return {
-          getItem:    (key) => localStorage.getItem(key),
-          setItem:    debouncedSetItem,
+          getItem: (key) => {
+            const raw = localStorage.getItem(key)
+            return raw ? JSON.parse(raw) : null
+          },
+          setItem: isProjectionWindow() ? () => {} : debouncedSetItem,
           removeItem: (key) => localStorage.removeItem(key),
         }
-      }),
+      })(),
       partialize: (state) => ({
         schemaVersion: state.schemaVersion,
         media: state.media,
@@ -1839,11 +1848,11 @@ export const useStore = create(
         snapshots: state.snapshots,
         scenes: state.scenes,
         userPresets: state.userPresets,
-        audio: state.audio,
+        audio: { ...state.audio, meters: DEFAULTS.audio.meters },
         flux: state.flux,
         animation: state.animation,
-        ui: state.ui,
-        midi: state.midi,
+        ui: { ...state.ui, exportRequest: null },
+        midi: { ...state.midi, lastMsg: null },
       }),
       merge: (persistedState, currentState) => {
         const incomingVersion = persistedState?.schemaVersion

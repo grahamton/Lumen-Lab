@@ -79,7 +79,7 @@ export function SectionPresets({ onInteract }) {
           SAVE SNAPSHOT
         </button>
         <button
-          onClick={() => { onInteract?.(); setUi('exportRequest', true) }}
+          onClick={() => { onInteract?.(); setUi('exportRequest', { longEdge: 3840, filename: `LumenLab_${Date.now()}.png` }) }}
           className="flex-1 bg-neutral-800 border border-neutral-700 hover:border-cyan-400 hover:text-cyan-400 text-neutral-400 rounded py-1.5 text-[8px] tracking-wider transition-colors"
         >
           EXPORT PNG

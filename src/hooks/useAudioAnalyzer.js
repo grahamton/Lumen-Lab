@@ -6,6 +6,7 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
   const sourceNodeRef = useRef(null)
   const dataArrayRef = useRef(null)
   const audioElementRef = useRef(null)
+  const streamRef = useRef(null)
   const [isReady, setIsReady] = useState(false)
 
   const teardownAudio = () => {
@@ -29,6 +30,12 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
       audioElementRef.current = null
     }
 
+    // Stopping the tracks releases the mic (and the OS "in use" indicator).
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+
     dataArrayRef.current = null
   }
 
@@ -42,10 +49,11 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
 
     const initAudio = async () => {
       setIsReady(false)
+      let ctx = null
 
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext
-        const ctx = new AudioContext()
+        ctx = new AudioContext()
         const analyser = ctx.createAnalyser()
         analyser.fftSize = 512 // 256 bins
         analyser.smoothingTimeConstant = 0.8
@@ -54,10 +62,17 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
 
         if (source === 'mic') {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          if (disposed) {
+            stream.getTracks().forEach((track) => track.stop())
+            ctx.close()
+            return
+          }
+          streamRef.current = stream
           sourceNode = ctx.createMediaStreamSource(stream)
         } else if (source === 'file') {
           if (!fileUrl) {
             console.warn("Audio file source selected but no fileUrl provided.")
+            ctx.close()
             return
           }
           const audioEl = new Audio(fileUrl)
@@ -71,6 +86,7 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
           audioElementRef.current = audioEl
         } else {
           console.warn("Unknown audio source:", source)
+          ctx.close()
           return
         }
 
@@ -89,6 +105,7 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
         setIsReady(true)
 
       } catch (err) {
+        ctx?.close()
         console.error("Audio Init Error:", err)
         alert("Failed to initialize audio. Check permissions?")
       }

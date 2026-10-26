@@ -1,18 +1,6 @@
-/* eslint-disable react-hooks/immutability */
 import React, { useRef, useMemo, useEffect, useState, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import {
-  Texture,
-  Vector2,
-  Vector3,
-  Vector4,
-  VideoTexture,
-  WebGLRenderTarget,
-  LinearFilter,
-  RGBAFormat,
-} from 'three'
-import { EffectComposer, Bloom, Noise, ChromaticAberration } from '@react-three/postprocessing'
-import { BlendFunction } from 'postprocessing'
+import { Texture, Vector2, VideoTexture, WebGPURenderer } from 'three/webgpu'
 import { useStore } from '../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import {
@@ -26,8 +14,8 @@ import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'
 import { ProjectionCalibrationOverlay } from './ProjectionCalibrationOverlay'
 import { ProjectionSurfaceEditorOverlay } from './ProjectionSurfaceEditorOverlay'
 import { presets } from '../presets'
-import vertShader from '../shaders/visualizer.vert?raw'
-import fragShader from '../shaders/visualizer.frag?raw'
+import { createVisualizerMaterial } from '../shaders/visualizerNode'
+import { createEffectsPipeline } from '../shaders/effectsPipeline'
 import {
   getOutputRect,
   getProjectionTargetPoints,
@@ -42,12 +30,26 @@ import {
   updateProjectionCanvasRegistry,
 } from '../utils/projectionCanvasRegistry'
 import { isProjectionWindow } from '../utils/windowMode'
+import { publishCanvasFrame, subscribeCanvasFrames } from '../utils/canvasFrameBus'
 
 const SYM_TYPE_MAP = { radial: 0, mirrorX: 1, mirrorY: 2 }
 const WARP_MAP     = { none: 0, polar: 1, 'log-polar': 2 }
 const TILE_MAP     = { none: 0, p1: 1, p2: 2, p4m: 3 }
 const GEN_MAP      = { none: 0, fibonacci: 1, voronoi: 2, grid: 3, liquid: 4, plasma: 5, fractal: 6 }
 const projectionWindowMode = isProjectionWindow()
+// `?renderer=webgl` forces the WebGL2 backend (troubleshooting escape hatch).
+const forceWebGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl'
+
+// WebGPU first; three falls back to its WebGL2 backend when WebGPU is unavailable.
+async function createRenderer(defaults) {
+  const renderer = new WebGPURenderer({ ...defaults, antialias: false, forceWebGL })
+  await renderer.init()
+  if (!renderer.backend.isWebGPUBackend) {
+    console.info('[Lumen Lab] WebGPU unavailable, rendering with the WebGL2 backend')
+  }
+  return renderer
+}
+
 const BLEND_MODE_MAP = {
   normal: 'normal',
   screen: 'screen',
@@ -157,11 +159,8 @@ function ProjectionSourceCanvas({ sourceKey, renderStateResolver, mediaDescripto
       }}
     >
       <Canvas
-        gl={{
-          preserveDrawingBuffer: true,
-          antialias: false,
-          powerPreference: 'high-performance',
-        }}
+        gl={createRenderer}
+        flat
         dpr={dpr}
         camera={{ position: [0, 0, 1] }}
         onCreated={({ gl }) => onCanvasReady(sourceKey, gl.domElement)}
@@ -173,7 +172,6 @@ function ProjectionSourceCanvas({ sourceKey, renderStateResolver, mediaDescripto
           enableOutputActions={false}
           useMirroredAudio={true}
         />
-        <EffectsLayer />
       </Canvas>
     </div>
   )
@@ -192,11 +190,11 @@ function ProjectionSurfaceCanvas({ surface, sourceCanvas, sourceRect }) {
       return undefined
     }
 
-    let frameId = null
+    if (!context) return undefined
 
-    const syncFrame = () => {
-      if (!outputCanvas || !sourceCanvas || !context) return
-
+    // Copy on the source's render, not a separate rAF: GPU canvases are only
+    // readable in the same task they were drawn in.
+    return subscribeCanvasFrames(sourceCanvas, () => {
       if (outputCanvas.width !== sourceCanvas.width || outputCanvas.height !== sourceCanvas.height) {
         outputCanvas.width = sourceCanvas.width
         outputCanvas.height = sourceCanvas.height
@@ -204,13 +202,7 @@ function ProjectionSurfaceCanvas({ surface, sourceCanvas, sourceRect }) {
 
       context.clearRect(0, 0, outputCanvas.width, outputCanvas.height)
       context.drawImage(sourceCanvas, 0, 0, outputCanvas.width, outputCanvas.height)
-      frameId = requestAnimationFrame(syncFrame)
-    }
-
-    syncFrame()
-    return () => {
-      if (frameId) cancelAnimationFrame(frameId)
-    }
+    })
   }, [sourceCanvas])
 
   const targetPoints = surface.points.map((point) => ({
@@ -246,7 +238,6 @@ function ProjectionSurfaceCanvas({ surface, sourceCanvas, sourceRect }) {
 
 // The Inner Scene
 function VisualizerScene({ renderState = null, mediaDescriptor = null, preferImageElement = true, enableOutputActions = true, useMirroredAudio = false }) {
-  const meshRef = useRef()
   const {
     image,
     liveMedia,
@@ -273,11 +264,10 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     }))
   )
 
-  const { gl, size } = useThree()
+  const { gl, size, scene, camera } = useThree()
   const timeRef = useRef(0)
   const genTimeRef = useRef(0)
   const fluxDriftRef = useRef({ rotation: 0, scale: 0 })
-  const imageAspect = useRef(1)
   // Cache for stable (non-audio-reactive) uniform values to skip redundant writes.
   const prevUniRef = useRef({})
   const [resolvedMedia, setResolvedMedia] = useState(null)
@@ -314,57 +304,22 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
   }, [duration, enableOutputActions, isRecording, setRecording])
 
 
-  const [texture] = useState(() => {
-    const t = new Texture()
-    t.image = new Image()
-    return t
-  })
+  const [{ material, uniforms, placeholder }] = useState(createVisualizerMaterial)
+  const [pipeline] = useState(() => createEffectsPipeline(gl, scene, camera))
 
-  // ... (rest of uniforms initialization)
-  const [uniforms] = useState(() => ({
-    uTexture: { value: texture },
-    uResolution: { value: new Vector2(size.width, size.height) },
-    uAspect: { value: size.width / size.height },
-    uImageAspect: { value: 1.0 }, // New: Image Aspect
-    uShape: { value: 0 }, // New: 0=Rect, 1=Circle
-    uTime: { value: 0 },
-    uGenTime: { value: 0 }, // New: Generator specific time
-    uTransforms: { value: new Vector4(0, 0, 1, 0) }, // x, y, scale, rotation
-    uSymEnabled: { value: false },
-    uSymSlices: { value: 6 },
-    uSymType: { value: 0 }, // 0=Radial, 1=MirrorX, 2=MirrorY
-    uSymOffset: { value: 0 },
-    uWarpType: { value: 0 }, // 0=none, 1=polar, 2=log
-    uDisplacement: { value: new Vector2(0, 10) },
-    uTilingType: { value: 0 }, // 0=none
-    uTilingScale: { value: 1 },
-    uTilingOverlap: { value: 0 }, // 0-1 blend between tiled/original UVs
-    uPosterize: { value: 256 },
-    uColorHSL: { value: new Vector3(0, 1, 1) },
-    uEffects: { value: new Vector4(0, 0, 0, 0) }, // edge, invert, solarize, shift
-    uEdgeQuality: { value: 1 }, // 1 = full Sobel (9-tap), 0 = fast Laplacian (5-tap)
-    uGenType: { value: 0 },
-    uGenParams: { value: new Vector3(50, 50, 50) },
-    // Audio Uniforms
-    uAudioLow: { value: 0 },
-    uAudioMid: { value: 0 },
-    uAudioHigh: { value: 0 }
-  }))
+  useEffect(() => () => {
+    pipeline.dispose()
+    material.dispose()
+    placeholder.dispose()
+  }, [material, pipeline, placeholder])
+
   const clearResolvedTexture = useCallback(() => {
-    const uniformValues = uniforms
-    const currentTexture = uniformValues.uTexture.value
+    const currentTexture = uniforms.uTexture.value
+    if (currentTexture !== placeholder) currentTexture.dispose()
+    uniforms.uTexture.value = placeholder
+    uniforms.uImageAspect.value = 1
+  }, [placeholder, uniforms])
 
-    if (currentTexture && currentTexture !== texture && typeof currentTexture.dispose === 'function') {
-      currentTexture.dispose()
-    }
-
-    texture.image = new Image()
-    texture.needsUpdate = true
-    uniformValues.uTexture.value = texture
-    uniformValues.uImageAspect.value = 1
-  }, [texture, uniforms])
-
-  // ... (rest of useEffects)
   useEffect(() => {
     if (canUseImageElement) {
       setResolvedMedia(image)
@@ -437,35 +392,18 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     if (isVideo && resolvedMedia.readyState < 2) return
     if (!isVideo && !resolvedMedia.complete) return
 
-    const uniformValues = uniforms
-    const currentTexture = uniformValues.uTexture.value
-    let finalTexture = currentTexture
+    // Fresh texture per source: re-pointing an uploaded texture at a new image
+    // of a different size leaves the GPU allocation stale.
+    const nextTexture = isVideo ? new VideoTexture(resolvedMedia) : new Texture(resolvedMedia)
+    nextTexture.needsUpdate = true
+    const previousTexture = uniforms.uTexture.value
+    uniforms.uTexture.value = nextTexture
+    if (previousTexture !== placeholder) previousTexture.dispose()
 
-    // If switching types, create new texture instance
-    if (isVideo && !(finalTexture instanceof VideoTexture)) {
-      finalTexture = new VideoTexture(resolvedMedia)
-      if (currentTexture && currentTexture !== texture && typeof currentTexture.dispose === 'function') {
-        currentTexture.dispose()
-      }
-      uniformValues.uTexture.value = finalTexture
-    } else if (!isVideo && (finalTexture instanceof VideoTexture)) {
-      finalTexture = new Texture(resolvedMedia)
-      currentTexture.dispose()
-      uniformValues.uTexture.value = finalTexture
-    }
-
-    finalTexture.image = resolvedMedia
-    finalTexture.needsUpdate = true
-
-    // Update Aspect Ratio
-    let w = isVideo ? resolvedMedia.videoWidth : resolvedMedia.naturalWidth
-    let h = isVideo ? resolvedMedia.videoHeight : resolvedMedia.naturalHeight
-
-    if (h > 0) {
-      imageAspect.current = w / h
-      uniformValues.uImageAspect.value = imageAspect.current
-    }
-  }, [clearResolvedTexture, resolvedMedia, texture, uniforms])
+    const w = isVideo ? resolvedMedia.videoWidth : resolvedMedia.naturalWidth
+    const h = isVideo ? resolvedMedia.videoHeight : resolvedMedia.naturalHeight
+    if (h > 0) uniforms.uImageAspect.value = w / h
+  }, [clearResolvedTexture, placeholder, resolvedMedia, uniforms])
 
   // Resize Handler
   useEffect(() => {
@@ -519,11 +457,6 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
       setAudio('meters', { bass, mid, high })
     }
 
-    // Audio Uniforms
-    uniformValues.uAudioLow.value = bass
-    uniformValues.uAudioMid.value = mid
-    uniformValues.uAudioHigh.value = high
-
     // --- FLUX DRIFT LOGIC ---
     const fluxDrift = fluxDriftRef.current
     fluxDrift.rotation = 0
@@ -570,7 +503,8 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     const shape = canvas.shape === 'circle' ? 1 : 0
     if (p.shape !== shape) { uniformValues.uShape.value = shape; p.shape = shape }
 
-    if (p.symEnabled !== symmetry.enabled) { uniformValues.uSymEnabled.value = symmetry.enabled; p.symEnabled = symmetry.enabled }
+    const symEnabled = symmetry.enabled ? 1 : 0
+    if (p.symEnabled !== symEnabled) { uniformValues.uSymEnabled.value = symEnabled; p.symEnabled = symEnabled }
     if (p.symSlices !== symmetry.slices) { uniformValues.uSymSlices.value = symmetry.slices; p.symSlices = symmetry.slices }
     const symType = SYM_TYPE_MAP[symmetry.type] || 0
     if (p.symType !== symType) { uniformValues.uSymType.value = symType; p.symType = symType }
@@ -610,118 +544,64 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     const edgeQuality = perfCap ? 0 : 1
     if (p.edgeQuality !== edgeQuality) { uniformValues.uEdgeQuality.value = edgeQuality; p.edgeQuality = edgeQuality }
 
-    // Debug Generators
-    /* if (stateThree.clock.elapsedTime % 2 < 0.05) {
-       console.log("GenType:", generator.type, "uGenType:", uniformValues.uGenType.value, "uGenTime:", uniformValues.uGenTime.value.toFixed(2))
-    } */
-  })
+    pipeline.update({
+      bloom: effects.bloom,
+      chromaticAberration: perfCap ? Math.min(effects.chromaticAberration, 0.5) : effects.chromaticAberration,
+      noise: perfCap ? Math.min(effects.noise, 0.5) : effects.noise,
+      aspect: size.width / size.height,
+    })
+    pipeline.render()
+    publishCanvasFrame(gl.domElement)
+  }, 1) // priority > 0: this loop owns rendering (post-processing pipeline)
 
-  // Export Request Handler (Safe RenderTarget Method)
+  // Export: re-render the full pipeline (effects included) at the requested size
+  // and capture the canvas in the same task, before the frame is presented.
   useEffect(() => {
-    if (!enableOutputActions) return undefined
-    if (exportRequest) {
-      try {
-        const { width, height, filename } = exportRequest
+    if (!enableOutputActions || !exportRequest) return
 
-        // Create a RenderTarget
-        const rt = new WebGLRenderTarget(width, height, {
-          minFilter: LinearFilter,
-          magFilter: LinearFilter,
-          format: RGBAFormat
-        })
+    // Long edge defaults to 4K; the short edge follows the on-screen aspect.
+    const aspect = size.width / size.height
+    const longEdge = exportRequest.longEdge ?? 3840
+    const width = exportRequest.width ?? Math.round(aspect >= 1 ? longEdge : longEdge * aspect)
+    const height = exportRequest.height ?? Math.round(aspect >= 1 ? longEdge / aspect : longEdge)
+    const filename = exportRequest.filename ?? `LumenLab_${Date.now()}.png`
+    const previousPixelRatio = gl.getPixelRatio()
+    const previousSize = gl.getSize(new Vector2())
 
-        const uniformValues = uniforms // Current uniforms
-
-        // Resize Uniforms for Export
-        const originalResolution = uniformValues.uResolution.value.clone()
-        const originalAspect = uniformValues.uAspect.value
-
-        uniformValues.uResolution.value.set(width, height)
-        uniformValues.uAspect.value = width / height
-
-        // Render to Target
-        gl.setRenderTarget(rt)
-        gl.render(gl.scene, gl.camera)
-        gl.setRenderTarget(null) // Back to screen
-
-        // Read Pixels
-        const buffer = new Uint8Array(width * height * 4)
-        gl.readRenderTargetPixels(rt, 0, 0, width, height, buffer)
-
-        // Flip Y (WebGL reads upside down)
-        const flippedBuffer = new Uint8Array(width * height * 4)
-        const stride = width * 4
-        for (let y = 0; y < height; y++) {
-          const srcRow = (height - 1 - y) * stride
-          const dstRow = y * stride
-          flippedBuffer.set(buffer.subarray(srcRow, srcRow + stride), dstRow)
+    try {
+      uniforms.uResolution.value.set(width, height)
+      uniforms.uAspect.value = width / height
+      gl.setPixelRatio(1)
+      gl.setSize(width, height, false)
+      pipeline.render()
+      gl.domElement.toBlob((blob) => {
+        if (!blob) {
+          console.error('Export failed: canvas produced no image')
+          return
         }
-
-        // Convert to Blob (via temporary Canvas) - Safest for browser compatibility
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
-        const imageData = ctx.createImageData(width, height)
-        imageData.data.set(flippedBuffer)
-        ctx.putImageData(imageData, 0, 0)
-
-        canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = filename
-          a.click()
-          URL.revokeObjectURL(url)
-          triggerExport(null)
-        }, 'image/png')
-
-        // Cleanup
-        rt.dispose()
-
-        // Restore Uniforms
-        uniformValues.uResolution.value.copy(originalResolution)
-        uniformValues.uAspect.value = originalAspect
-      } catch (err) {
-        console.error("Export Failed:", err)
-        triggerExport(null)
-      }
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }, 'image/png')
+    } catch (err) {
+      console.error('Export failed:', err)
+    } finally {
+      gl.setPixelRatio(previousPixelRatio)
+      gl.setSize(previousSize.width, previousSize.height, false)
+      uniforms.uResolution.value.set(size.width, size.height)
+      uniforms.uAspect.value = size.width / size.height
+      pipeline.render()
+      triggerExport(null)
     }
-  }, [enableOutputActions, exportRequest, gl, triggerExport, uniforms])
+  }, [enableOutputActions, exportRequest, gl, pipeline, size, triggerExport, uniforms])
 
   return (
-    <mesh ref={meshRef}>
+    <mesh material={material} frustumCulled={false}>
       <planeGeometry args={[2, 2]} />
-      <shaderMaterial
-        vertexShader={vertShader}
-        fragmentShader={fragShader}
-        uniforms={uniforms}
-        transparent={true} // Needed for Portal/Circle Mask Alpha
-        depthWrite={false}
-        depthTest={false}
-      />
     </mesh>
-  )
-}
-
-function EffectsLayer() {
-  const { perfCapFx, bloom, chromaticRaw, noiseRaw } = useStore(
-    useShallow((state) => ({
-      perfCapFx: state.ui?.perfCapFx,
-      bloom: getEffectiveAuthoredSceneState(state).effects.bloom,
-      chromaticRaw: getEffectiveAuthoredSceneState(state).effects.chromaticAberration,
-      noiseRaw: getEffectiveAuthoredSceneState(state).effects.noise,
-    }))
-  )
-
-  const chromaticAberration = perfCapFx ? Math.min(chromaticRaw, 0.5) : chromaticRaw
-  const noise = perfCapFx ? Math.min(noiseRaw, 0.5) : noiseRaw
-  return (
-    <EffectComposer>
-      {bloom > 0 && <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} intensity={bloom * 2} />}
-      {chromaticAberration > 0 && <ChromaticAberration offset={[chromaticAberration * 0.01, chromaticAberration * 0.01]} />}
-      {noise > 0 && <Noise opacity={noise} blendFunction={BlendFunction.OVERLAY} />}
-    </EffectComposer>
   )
 }
 
@@ -885,11 +765,8 @@ export function CanvasGL() {
           }}
         >
           <Canvas
-            gl={{
-              preserveDrawingBuffer: true, // Needed for Export & Recording
-              antialias: false,
-              powerPreference: "high-performance"
-            }}
+            gl={createRenderer}
+            flat
             dpr={lowResPreview ? 0.75 : undefined}
             camera={{ position: [0, 0, 1] }}
             onCreated={({ gl }) => setSourceCanvasElement(gl.domElement)}
@@ -899,7 +776,6 @@ export function CanvasGL() {
               enableOutputActions={!projectionWindowMode}
               useMirroredAudio={projectionWindowMode}
             />
-            <EffectsLayer />
           </Canvas>
         </div>
         <ProjectionPatternStage

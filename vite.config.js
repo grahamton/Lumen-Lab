@@ -6,19 +6,18 @@ export default defineConfig({
   plugins: [react()],
   base: './', // Required for Electron relative paths
   optimizeDeps: {
-    include: ['three', '@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
+    include: ['three', 'three/webgpu', 'three/tsl', '@react-three/fiber'],
   },
   build: {
+    // Desktop app loaded from disk: chunk size isn't a network cost.
+    chunkSizeWarningLimit: 2500,
     rollupOptions: {
       output: {
+        // Only split three out. Finer vendor splits created a circular chunk
+        // import (vendor <-> react-three <-> state) that blanked the packaged app.
         manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined
-
-          if (id.includes('/three/') || id.includes('\\three\\')) return 'three-vendor'
-          if (id.includes('@react-three')) return 'react-three-vendor'
-          if (id.includes('postprocessing')) return 'postprocessing-vendor'
-          if (id.includes('zustand')) return 'state-vendor'
-          return 'vendor'
+          if (id.includes('node_modules/three/') || id.includes('node_modules\\three\\')) return 'three-vendor'
+          return undefined
         },
       },
     },

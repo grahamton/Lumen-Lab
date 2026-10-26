@@ -4,6 +4,37 @@ All notable changes to Lumen Lab are documented here.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-26
+
+### Changed
+- Renderer moved to three.js r186 `WebGPURenderer`, with automatic fallback to WebGL2 where WebGPU is unavailable (`?renderer=webgl` forces the fallback)
+- Visualizer shader ported from GLSL to TSL, so one source compiles to WGSL (WebGPU) and GLSL (WebGL2)
+- Bloom, chromatic aberration, and grain now run on three's native `RenderPipeline` (replaces pmndrs `postprocessing`, which is WebGL-only)
+- Independent surfaces now carry their own scene's bloom / chromatic / grain values instead of the live ones
+- Projection surfaces copy their source on each rendered frame (GPU canvases are only readable in the frame they were drawn)
+- Electron 39 → 45 (WebGPU on Linux), electron-builder 26.18
+- Installer no longer bundles `node_modules`; Vite already bundles everything the app needs
+
+### Fixed
+- Packaged app opened to a blank window (circular vendor chunk imports)
+- Preload script failed in the sandboxed renderer, hiding the projector window and display picker
+- Video files blocked by the Content Security Policy
+- EXPORT PNG never produced a file; it now renders the full pipeline (effects included) at 4K on the long edge
+- Image and video input rendered black after the first texture upload
+- Microphone stayed open (and the OS indicator stayed on) after disabling audio
+- Projection window overwrote saved snapshots and MIDI mappings on close
+- Saving re-serialized the whole state (including inline media) on every change
+
+### Security
+- Navigation away from the app and new windows are blocked; external links open in the browser
+- Only microphone, MIDI, and fullscreen permissions are granted
+- No default menu in packaged builds (stray Ctrl+R / Ctrl+W / devtools mid-show)
+- Removed `unsafe-eval` from the CSP
+
+### Added
+- App icon set
+- CI (lint, test, build) and a tag-driven release workflow for Windows, macOS, and Linux
+
 ## [1.2.0] — 2026-07-22
 
 ### Added
