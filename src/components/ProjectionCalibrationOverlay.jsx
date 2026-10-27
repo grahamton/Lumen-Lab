@@ -9,6 +9,88 @@ import {
 
 const HANDLE_LABELS = ['TL', 'TR', 'BR', 'BL']
 const CORNER_KEYS = ['1', '2', '3', '4']
+const SIDEBAR_WIDTH = 256 // matches the w-64 controls sidebar (z-30), which sits above these overlays
+
+function clampTo(value, min, max) {
+  return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+// Width of the left sidebar when it is covering the canvas.
+function useSidebarInset() {
+  return useStore((state) => (state.ui?.controlsOpen ? SIDEBAR_WIDTH : 0))
+}
+
+/**
+ * A draggable handle. The drawn position is clamped inside the visible viewport
+ * (clear of the sidebar); the true point is never modified. When clamped, a small
+ * arrow points toward where the real point is.
+ */
+export function OverlayHandle({
+  x,
+  y,
+  label,
+  title,
+  selected = false,
+  active = false,
+  tone = 'cyan',
+  size = 28,
+  insetLeft = 0,
+  viewportWidth,
+  viewportHeight,
+  onPointerDown,
+}) {
+  const margin = size / 2 + 6
+  const cx = clampTo(x, insetLeft + margin, viewportWidth - margin)
+  const cy = clampTo(y, margin, viewportHeight - margin)
+  const offscreen = Math.abs(cx - x) > 10 || Math.abs(cy - y) > 10
+  const angle = (Math.atan2(y - cy, x - cx) * 180) / Math.PI
+  const isAmber = tone === 'amber'
+  const highlighted = active || selected
+
+  const palette = isAmber
+    ? highlighted
+      ? 'border-amber-100 bg-amber-300 text-black shadow-[0_0_18px_rgba(251,191,36,0.4)]'
+      : 'border-amber-200 bg-amber-200 text-black shadow-[0_0_12px_rgba(251,191,36,0.22)]'
+    : highlighted
+      ? 'border-cyan-200 bg-cyan-300 text-black shadow-[0_0_20px_rgba(34,211,238,0.4)]'
+      : 'border-cyan-400 bg-black/80 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+
+  return (
+    <button
+      type="button"
+      title={offscreen ? `${title || label} (outside the view - drag to bring it back)` : (title || label)}
+      onPointerDown={onPointerDown}
+      className={`absolute pointer-events-auto touch-none flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[10px] font-semibold tracking-wider transition-colors ${palette} ${offscreen ? 'ring-2 ring-amber-300/80' : ''}`}
+      style={{ left: `${cx}px`, top: `${cy}px`, width: `${size}px`, height: `${size}px` }}
+    >
+      {label}
+      {offscreen && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 text-[11px] leading-none text-amber-300"
+          style={{ transform: `translate(-50%, -50%) rotate(${angle}deg) translateX(${size / 2 + 7}px)` }}
+        >
+          ▶
+        </span>
+      )}
+    </button>
+  )
+}
+
+/** Small hint dock, bottom-centre of the visible (non-sidebar) area. */
+export function OverlayDock({ insetLeft = 0, viewportWidth, children }) {
+  return (
+    <div
+      className="absolute bottom-3 pointer-events-auto -translate-x-1/2 rounded-xl border border-cyan-400/30 bg-black/80 px-3 py-2 text-[11px] text-cyan-50 shadow-lg backdrop-blur"
+      style={{
+        left: `${insetLeft + (viewportWidth - insetLeft) / 2}px`,
+        maxWidth: `${Math.max(240, viewportWidth - insetLeft - 24)}px`,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
 
 export function ProjectionCalibrationOverlay({
   projectionPoints,
@@ -19,6 +101,8 @@ export function ProjectionCalibrationOverlay({
   onClose,
 }) {
   const [activeHandle, setActiveHandle] = useState(null)
+  const [showSliders, setShowSliders] = useState(false)
+  const insetLeft = useSidebarInset()
   const {
     selectedCorner,
     showTestPattern,
@@ -108,10 +192,12 @@ export function ProjectionCalibrationOverlay({
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
     }
   }, [activeHandle, updatePoint, viewportHeight, viewportWidth])
 
@@ -120,7 +206,7 @@ export function ProjectionCalibrationOverlay({
       const tagName = event.target?.tagName
       const isInteractiveTarget = ['INPUT', 'BUTTON', 'SELECT', 'TEXTAREA'].includes(tagName)
 
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' || event.key === 'Escape') {
         event.preventDefault()
         onClose()
         return
@@ -226,16 +312,18 @@ export function ProjectionCalibrationOverlay({
         ))}
       </svg>
 
-      <div className="absolute top-4 right-4 pointer-events-auto max-w-xs rounded-xl border border-cyan-400/30 bg-black/75 px-4 py-3 text-[11px] text-cyan-50 backdrop-blur">
-        <div className="mb-1 text-[10px] font-semibold tracking-[0.25em] text-cyan-300">PROJECTION CALIBRATION</div>
-        <div className="text-cyan-100/75">Drag corners for coarse alignment, then use <span className="font-semibold text-cyan-200">arrow keys</span> for pixel nudging. Hold <span className="font-semibold text-cyan-200">Shift</span> for larger jumps.</div>
-        <div className="mt-3 grid grid-cols-4 gap-1.5">
+      <OverlayDock insetLeft={insetLeft} viewportWidth={viewportWidth}>
+        <div className="text-center text-[11px] text-cyan-100/80">
+          Drag corners · <span className="font-semibold text-cyan-200">Arrow keys</span> nudge · <span className="font-semibold text-cyan-200">Esc</span> done
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
           {HANDLE_LABELS.map((label, index) => (
             <button
               key={`select-${label}`}
               type="button"
+              title={`Select corner ${label} (key ${index + 1})`}
               onClick={() => setProjection('selectedCorner', index)}
-              className={`rounded-md border px-2 py-1 text-[10px] font-semibold tracking-[0.16em] transition-colors ${
+              className={`h-6 min-w-[28px] rounded-md border px-1.5 text-[10px] font-semibold tracking-wider transition-colors ${
                 selectedCorner === index
                   ? 'border-cyan-300 bg-cyan-300 text-black'
                   : 'border-cyan-400/30 bg-cyan-400/5 text-cyan-200 hover:bg-cyan-400/15'
@@ -244,78 +332,97 @@ export function ProjectionCalibrationOverlay({
               {label}
             </button>
           ))}
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-[10px] tracking-[0.18em] text-cyan-200/80">PATTERN</span>
           <button
             type="button"
+            title="Show or hide the guide grid (G)"
+            aria-pressed={showTestPattern}
             onClick={() => setProjection('showTestPattern', !showTestPattern)}
-            className={`rounded-md border px-3 py-1 text-[10px] font-semibold tracking-[0.18em] transition-colors ${
+            className={`h-6 rounded-md border px-2 text-[10px] font-semibold tracking-[0.12em] transition-colors ${
               showTestPattern
                 ? 'border-cyan-300 bg-cyan-300 text-black'
                 : 'border-cyan-400/30 bg-cyan-400/5 text-cyan-200 hover:bg-cyan-400/15'
             }`}
           >
-            {showTestPattern ? 'ON' : 'OFF'}
+            GRID
+          </button>
+          <button
+            type="button"
+            title="Guide brightness and nudge size"
+            aria-label="Guide settings"
+            aria-expanded={showSliders}
+            onClick={() => setShowSliders((open) => !open)}
+            className={`h-6 min-w-[28px] rounded-md border px-1.5 text-[11px] transition-colors ${
+              showSliders
+                ? 'border-cyan-300 bg-cyan-300/20 text-cyan-100'
+                : 'border-cyan-400/30 bg-cyan-400/5 text-cyan-200 hover:bg-cyan-400/15'
+            }`}
+          >
+            ⋯
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-6 rounded-md border border-cyan-400/40 bg-cyan-400/10 px-3 text-[10px] font-semibold tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
+          >
+            DONE
           </button>
         </div>
-        <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-[10px] tracking-[0.16em] text-cyan-200/80">
-            <span>GUIDE OPACITY</span>
-            <span className="tabular-nums text-cyan-100">{Math.round(guideOpacity * 100)}%</span>
+        {showSliders && (
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <label className="block">
+              <div className="mb-0.5 flex items-center justify-between text-[9px] tracking-[0.14em] text-cyan-200/80">
+                <span>GUIDE</span>
+                <span className="tabular-nums text-cyan-100">{Math.round(guideOpacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.2"
+                max="1"
+                step="0.05"
+                value={guideOpacity}
+                aria-label="Guide opacity"
+                onChange={(event) => setProjection('guideOpacity', Number(event.target.value))}
+                className="w-full accent-cyan-300"
+              />
+            </label>
+            <label className="block">
+              <div className="mb-0.5 flex items-center justify-between text-[9px] tracking-[0.14em] text-cyan-200/80">
+                <span>NUDGE</span>
+                <span className="tabular-nums text-cyan-100">{nudgeStep}px</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="12"
+                step="1"
+                value={nudgeStep}
+                aria-label="Nudge step"
+                onChange={(event) => setProjection('nudgeStep', Number(event.target.value))}
+                className="w-full accent-cyan-300"
+              />
+            </label>
           </div>
-          <input
-            type="range"
-            min="0.2"
-            max="1"
-            step="0.05"
-            value={guideOpacity}
-            onChange={(event) => setProjection('guideOpacity', Number(event.target.value))}
-            className="w-full accent-cyan-300"
-          />
-        </div>
-        <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-[10px] tracking-[0.16em] text-cyan-200/80">
-            <span>NUDGE STEP</span>
-            <span className="tabular-nums text-cyan-100">{nudgeStep}px</span>
-          </div>
-          <input
-            type="range"
-            min="1"
-            max="12"
-            step="1"
-            value={nudgeStep}
-            onChange={(event) => setProjection('nudgeStep', Number(event.target.value))}
-            className="w-full accent-cyan-300"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-3 rounded-md border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-        >
-          DONE
-        </button>
-      </div>
+        )}
+      </OverlayDock>
 
       {corners.map((corner, index) => (
-        <button
+        <OverlayHandle
           key={HANDLE_LABELS[index]}
-          type="button"
+          x={corner.x}
+          y={corner.y}
+          label={HANDLE_LABELS[index]}
+          title={`Corner ${HANDLE_LABELS[index]}`}
+          selected={selectedCorner === index}
+          active={activeHandle === index}
+          insetLeft={insetLeft}
+          viewportWidth={viewportWidth}
+          viewportHeight={viewportHeight}
           onPointerDown={(event) => {
             event.preventDefault()
             setProjection('selectedCorner', index)
             setActiveHandle(index)
           }}
-          className={`absolute pointer-events-auto flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[10px] font-semibold tracking-wider transition-colors ${
-            activeHandle === index || selectedCorner === index
-              ? 'border-cyan-200 bg-cyan-300 text-black shadow-[0_0_20px_rgba(34,211,238,0.35)]'
-              : 'border-cyan-400 bg-black/80 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
-          }`}
-          style={{ left: `${corner.x}px`, top: `${corner.y}px` }}
-        >
-          {HANDLE_LABELS[index]}
-        </button>
+        />
       ))}
     </div>
   )
