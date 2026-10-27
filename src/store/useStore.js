@@ -9,25 +9,30 @@ import {
   getProjectionSurfaceSourceMeta,
 } from '../utils/projectionSources'
 
-function debounce(fn, ms) {
+// Trailing debounce with a max wait: a steady stream of updates (audio meters,
+// gamepad, animation) would otherwise postpone the write indefinitely.
+export function debounce(fn, ms, maxWait = ms * 4) {
   let timer
   let pending = null
+  let firstPendingAt = 0
+
+  const run = () => {
+    clearTimeout(timer)
+    const args = pending
+    pending = null
+    fn(...args)
+  }
 
   const debounced = (...args) => {
+    if (!pending) firstPendingAt = Date.now()
     pending = args
     clearTimeout(timer)
-    timer = setTimeout(() => {
-      fn(...pending)
-      pending = null
-    }, ms)
+    const waited = Date.now() - firstPendingAt
+    timer = setTimeout(run, Math.max(0, Math.min(ms, maxWait - waited)))
   }
 
   debounced.flush = () => {
-    if (pending) {
-      clearTimeout(timer)
-      fn(...pending)
-      pending = null
-    }
+    if (pending) run()
   }
 
   return debounced
@@ -93,15 +98,18 @@ function createSceneOrigin(sourceMode, sourceId = null, extra = {}) {
 
 function applySceneStateSnapshot(state, snap) {
   const lock = state.ui?.lockGeometry
+  // Presets and older snapshots only carry the keys they change; layer them over
+  // defaults so missing keys (e.g. color.hue) never reach the shader as NaN.
+  const section = (key) => ({ ...DEFAULTS[key], ...(snap[key] || {}) })
   const nextState = {
-    transforms: lock ? state.transforms : { ...snap.transforms },
-    symmetry: lock ? state.symmetry : { ...snap.symmetry },
-    warp: lock ? state.warp : { ...snap.warp },
-    displacement: { ...snap.displacement },
-    tiling: lock ? state.tiling : { ...snap.tiling },
-    color: { ...snap.color },
-    effects: { ...snap.effects },
-    generator: { ...snap.generator },
+    transforms: lock ? state.transforms : section('transforms'),
+    symmetry: lock ? state.symmetry : section('symmetry'),
+    warp: lock ? state.warp : section('warp'),
+    displacement: section('displacement'),
+    tiling: lock ? state.tiling : section('tiling'),
+    color: section('color'),
+    effects: section('effects'),
+    generator: section('generator'),
   }
 
   if (Object.hasOwn(snap, 'media')) {
@@ -408,7 +416,9 @@ function withActiveSceneSnapshot(state, patch) {
     ...rootPatch,
     scenes: sourceScenes.map((scene) => (
       String(scene.id) === String(activeSceneId)
-        ? { ...scene, state: cloneProjectData(nextDraftState) }
+        // Sections are replaced, never mutated, so the scene can share them with
+        // the draft; deep-cloning here (inline media included) ran on every tick.
+        ? { ...scene, state: nextDraftState }
         : scene
     )),
     sceneEditor: {
@@ -510,13 +520,48 @@ function getEffectiveSceneSection(state, key) {
   return getEffectiveAuthoredSceneState(state)?.[key] ?? state[key]
 }
 
+const UNDO_SECTION_KEYS = ['transforms', 'symmetry', 'warp', 'displacement', 'tiling', 'generator', 'color', 'effects']
+const UNDO_LIMIT = 20
+// Edits arriving within this window of the previous one (a slider drag, a knob
+// twist) collapse into a single undo step.
+const UNDO_COALESCE_MS = 750
+let lastUndoableEditAt = 0
+let toastSequence = 0
+const NEW_SURFACE_INSET = 0.15
+const DUPLICATE_OFFSET = 0.03
+
+// Undo tracks what the user is looking at: the authored draft while a scene is
+// open, otherwise the live state.
+function captureUndoState(state) {
+  const snapshot = { canvas: state.canvas }
+  for (const key of UNDO_SECTION_KEYS) snapshot[key] = getEffectiveSceneSection(state, key)
+  return snapshot
+}
+
+function restoreUndoState(state, snapshot) {
+  const { canvas, ...sections } = snapshot
+  return { ...withActiveSceneSnapshot(state, sections), canvas: canvas ?? state.canvas }
+}
+
+function withUndoStep(state, patch) {
+  const now = Date.now()
+  const startsNewStep = now - lastUndoableEditAt > UNDO_COALESCE_MS
+  lastUndoableEditAt = now
+  if (!startsNewStep) return patch
+  return {
+    ...patch,
+    undoStack: [captureUndoState(state), ...state.undoStack].slice(0, UNDO_LIMIT),
+    redoStack: [],
+  }
+}
+
 function resetProjectionSurfaceSources(surfaces = [], predicate = () => true) {
   return surfaces.map((surface) => (
     predicate(surface) ? createLiveProjectionSurface(surface) : surface
   ))
 }
 
-const DEFAULTS = {
+export const DEFAULTS = {
   schemaVersion: SCHEMA_VERSION,
   image: null,
   media: null,
@@ -553,7 +598,7 @@ const DEFAULTS = {
     isAnimated: true,
   },
   color: {
-    posterize: 32,
+    posterize: 256, // off
     hue: 0.0, sat: 1.0, light: 1.0,
   },
   effects: {
@@ -644,6 +689,7 @@ const DEFAULTS = {
     midiLearnActive: false,
     midiLearnId: null,
     resetNotice: null,
+    storageNotice: null,
     lowResPreview: false,
     perfCapFx: false,
     lockGeometry: false,
@@ -652,6 +698,60 @@ const DEFAULTS = {
   recording: { isActive: false, progress: 0 },
   undoStack: [],
   redoStack: [],
+  toast: null,
+}
+
+// Saved state keeps each media file once, in mediaLibrary; everything else
+// (live look, snapshots, scenes, presets) stores an id reference. Inline images
+// are data URLs, and repeating them per snapshot blew the localStorage quota.
+function toMediaRef(media, libraryIds) {
+  return media?.id != null && libraryIds.has(String(media.id)) ? { id: media.id, libraryRef: true } : media
+}
+
+function fromMediaRef(media, libraryById) {
+  if (!media) return media ?? null
+  const resolved = media.libraryRef ? libraryById.get(String(media.id)) : media
+  // blob: URLs (videos picked in a browser session) die with the page.
+  return resolved && !String(resolved.src || '').startsWith('blob:') ? resolved : null
+}
+
+function mapStoredMedia(persisted, mapMedia) {
+  const mapState = (sceneState) => (sceneState && Object.hasOwn(sceneState, 'media')
+    ? { ...sceneState, media: mapMedia(sceneState.media) }
+    : sceneState)
+  return {
+    ...persisted,
+    media: mapMedia(persisted.media),
+    snapshots: (persisted.snapshots || []).map(mapState),
+    scenes: (persisted.scenes || []).map((scene) => (scene?.state ? { ...scene, state: mapState(scene.state) } : scene)),
+    userPresets: (persisted.userPresets || []).map((preset) => (preset?.state ? { ...preset, state: mapState(preset.state) } : preset)),
+  }
+}
+
+export function dehydrateStoredMedia(persisted) {
+  const libraryIds = new Set((persisted.mediaLibrary || []).map((entry) => String(entry.id)))
+  return mapStoredMedia(persisted, (media) => toMediaRef(media, libraryIds))
+}
+
+export function rehydrateStoredMedia(persisted) {
+  const mediaLibrary = (persisted.mediaLibrary || []).filter((entry) => !String(entry?.src || '').startsWith('blob:'))
+  const libraryById = new Map(mediaLibrary.map((entry) => [String(entry.id), entry]))
+  const restored = mapStoredMedia({ ...persisted, mediaLibrary }, (media) => fromMediaRef(media, libraryById))
+  if (!restored.media) restored.activeMediaId = null
+  return restored
+}
+
+// What a first launch (or "start fresh") shows: something already moving, so
+// the first thing a new user sees is the instrument working, not a black frame.
+const STARTER_PRESET_NAME = 'Kaleido Bloom'
+
+function createStarterState() {
+  const preset = presets.find((entry) => entry.name === STARTER_PRESET_NAME)
+  return {
+    ...DEFAULTS,
+    ...(preset ? applySceneStateSnapshot(DEFAULTS, preset.state) : {}),
+    flux: { ...DEFAULTS.flux, enabled: true },
+  }
 }
 
 export const useStore = create(
@@ -845,6 +945,9 @@ export const useStore = create(
       })),
 
       toggleControls: (isOpen) => set((state) => ({ ui: { ...state.ui, controlsOpen: isOpen } })),
+      // Transient on-screen message (see Toasts.jsx). Never persisted.
+      notify: (message) => set({ toast: message ? { message, id: ++toastSequence } : null }),
+
       toggleHelp: (val) => set((state) => ({
         ui: { ...state.ui, helpOpen: val !== undefined ? val : !state.ui.helpOpen }
       })),
@@ -918,7 +1021,10 @@ export const useStore = create(
         snapshots: state.snapshots.filter((_, i) => i !== index)
       })),
 
-      loadSnapshot: (snap) => set((state) => withActiveSceneSnapshot(state, applySceneStateSnapshot(state, snap))),
+      loadSnapshot: (snap, { recordUndo = true } = {}) => set((state) => {
+        const patch = withActiveSceneSnapshot(state, applySceneStateSnapshot(state, snap))
+        return recordUndo ? withUndoStep(state, patch) : patch
+      }),
 
       saveUserPreset: (name) => set((state) => {
         const newPreset = {
@@ -1420,45 +1526,41 @@ export const useStore = create(
         animation: { ...state.animation, [key]: value }
       })),
 
-      setTransform: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+      setTransform: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
         transforms: { ...getEffectiveSceneSection(state, 'transforms'), [key]: value }
-      })),
+      }))),
 
-      setSymmetry: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+      setSymmetry: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
         symmetry: { ...getEffectiveSceneSection(state, 'symmetry'), [key]: value }
-      })),
+      }))),
 
-      setWarp: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+      setWarp: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
         warp: { ...getEffectiveSceneSection(state, 'warp'), [key]: value }
-      })),
+      }))),
 
-      setDisplacement: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+      setDisplacement: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
         displacement: { ...getEffectiveSceneSection(state, 'displacement'), [key]: value }
-      })),
+      }))),
 
       setRecording: (key, value) => set((state) => ({
         recording: { ...state.recording, [key]: value }
       })),
 
-      setTiling: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+      setTiling: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
         tiling: { ...getEffectiveSceneSection(state, 'tiling'), [key]: value }
-      })),
+      }))),
 
-      setColor: (key, value) => {
-        set((state) => withActiveSceneSnapshot(state, {
-          color: { ...getEffectiveSceneSection(state, 'color'), [key]: value }
-        }))
-      },
+      setColor: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
+        color: { ...getEffectiveSceneSection(state, 'color'), [key]: value }
+      }))),
 
-      setEffect: (key, value) => set((state) => withActiveSceneSnapshot(state, {
+      setEffect: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
         effects: { ...getEffectiveSceneSection(state, 'effects'), [key]: value }
-      })),
+      }))),
 
-      setGenerator: (key, value) => {
-        set((state) => withActiveSceneSnapshot(state, {
-          generator: { ...getEffectiveSceneSection(state, 'generator'), [key]: value }
-        }))
-      },
+      setGenerator: (key, value) => set((state) => withUndoStep(state, withActiveSceneSnapshot(state, {
+        generator: { ...getEffectiveSceneSection(state, 'generator'), [key]: value }
+      }))),
 
       setCanvas: (key, value) => set((state) => ({
         canvas: { ...state.canvas, [key]: value }
@@ -1501,19 +1603,23 @@ export const useStore = create(
       addProjectionSurface: (name = null) => set((state) => {
         const nextId = `surface-${Date.now()}-${Math.round(Math.random() * 1000)}`
         const nextIndex = (state.projection.surfaces?.length || 0) + 1
+        // Start inset (and cascaded) so every corner handle is on screen and new
+        // shapes don't land exactly on top of each other.
+        const inset = NEW_SURFACE_INSET + ((nextIndex - 1) % 5) * 0.04
+        const far = inset + (1 - 2 * NEW_SURFACE_INSET)
         const nextSurface = {
           id: nextId,
-          name: name || `Surface ${nextIndex}`,
+          name: name || `Shape ${nextIndex}`,
           visible: true,
           opacity: 1,
           blendMode: 'screen',
           sourceMode: 'live',
           sourceId: 'live',
           points: [
-            { x: 0, y: 0 },
-            { x: 1, y: 0 },
-            { x: 1, y: 1 },
-            { x: 0, y: 1 },
+            { x: inset, y: inset },
+            { x: far, y: inset },
+            { x: far, y: far },
+            { x: inset, y: far },
           ],
           maskPoints: [
             { x: 0, y: 0 },
@@ -1559,14 +1665,16 @@ export const useStore = create(
         if (!sourceSurface) return {}
 
         const nextId = `surface-${Date.now()}-${Math.round(Math.random() * 1000)}`
+        // Offset the copy rigidly so it's visible as a second shape; clamping each
+        // corner on its own would distort shapes that touch the edge.
+        const offsetFor = (values) => (Math.max(...values) + DUPLICATE_OFFSET <= 1 ? DUPLICATE_OFFSET : -DUPLICATE_OFFSET)
+        const dx = offsetFor(sourceSurface.points.map((point) => point.x))
+        const dy = offsetFor(sourceSurface.points.map((point) => point.y))
         const duplicatedSurface = {
           ...sourceSurface,
           id: nextId,
           name: `${sourceSurface.name} Copy`,
-          points: sourceSurface.points.map((point) => ({
-            x: Math.min(1, point.x + 0.02),
-            y: Math.min(1, point.y + 0.02),
-          })),
+          points: sourceSurface.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
           maskPoints: (sourceSurface.maskPoints || []).map((point) => ({ ...point })),
         }
 
@@ -1734,13 +1842,9 @@ export const useStore = create(
       }),
 
       pushUndo: () => set((state) => {
-        const snapshot = {
-          transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
-          displacement: state.displacement, tiling: state.tiling, generator: state.generator,
-          color: state.color, effects: state.effects, canvas: state.canvas,
-        }
+        lastUndoableEditAt = Date.now()
         return {
-          undoStack: [snapshot, ...state.undoStack].slice(0, 20),
+          undoStack: [captureUndoState(state), ...state.undoStack].slice(0, UNDO_LIMIT),
           redoStack: [],
         }
       }),
@@ -1748,23 +1852,23 @@ export const useStore = create(
       undo: () => set((state) => {
         if (state.undoStack.length === 0) return {}
         const [previous, ...rest] = state.undoStack
-        const current = {
-          transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
-          displacement: state.displacement, tiling: state.tiling, generator: state.generator,
-          color: state.color, effects: state.effects, canvas: state.canvas,
+        lastUndoableEditAt = 0
+        return {
+          ...restoreUndoState(state, previous),
+          undoStack: rest,
+          redoStack: [captureUndoState(state), ...state.redoStack].slice(0, UNDO_LIMIT),
         }
-        return { ...previous, undoStack: rest, redoStack: [current, ...state.redoStack].slice(0, 20) }
       }),
 
       redo: () => set((state) => {
         if (state.redoStack.length === 0) return {}
         const [next, ...rest] = state.redoStack
-        const current = {
-          transforms: state.transforms, symmetry: state.symmetry, warp: state.warp,
-          displacement: state.displacement, tiling: state.tiling, generator: state.generator,
-          color: state.color, effects: state.effects, canvas: state.canvas,
+        lastUndoableEditAt = 0
+        return {
+          ...restoreUndoState(state, next),
+          redoStack: rest,
+          undoStack: [captureUndoState(state), ...state.undoStack].slice(0, UNDO_LIMIT),
         }
-        return { ...next, redoStack: rest, undoStack: [current, ...state.undoStack].slice(0, 20) }
       }),
 
       triggerExport: (req) => set((state) => ({
@@ -1778,21 +1882,21 @@ export const useStore = create(
         const { pushUndo } = get()
         pushUndo()
         set((state) => ({
-          transforms: { ...DEFAULTS.transforms },
-          symmetry: { ...DEFAULTS.symmetry },
-          warp: { ...DEFAULTS.warp },
-          displacement: { ...DEFAULTS.displacement },
-          tiling: { ...DEFAULTS.tiling },
-          generator: { ...DEFAULTS.generator, type: state.generator.type },
-          color: { ...DEFAULTS.color },
-          effects: { ...DEFAULTS.effects },
-          flux: { ...state.flux },
-          audio: { ...state.audio },
+          ...withActiveSceneSnapshot(state, {
+            transforms: { ...DEFAULTS.transforms },
+            symmetry: { ...DEFAULTS.symmetry },
+            warp: { ...DEFAULTS.warp },
+            displacement: { ...DEFAULTS.displacement },
+            tiling: { ...DEFAULTS.tiling },
+            generator: { ...DEFAULTS.generator, type: getEffectiveSceneSection(state, 'generator').type },
+            color: { ...DEFAULTS.color },
+            effects: { ...DEFAULTS.effects },
+          }),
           animation: { ...state.animation, isPlaying: false }
         }))
       },
 
-      resetForUpload: () => set({
+      resetForUpload: () => set((state) => withActiveSceneSnapshot(state, {
         generator: { ...DEFAULTS.generator, type: 'none' }, // FORCE NONE
         tiling: { ...DEFAULTS.tiling },
         warp: { ...DEFAULTS.warp },
@@ -1800,13 +1904,13 @@ export const useStore = create(
         symmetry: { ...DEFAULTS.symmetry },
         effects: { ...DEFAULTS.effects },
         transforms: { ...DEFAULTS.transforms },
-      }),
+      })),
 
       // Factory Reset: Wipes EVERYTHING including user presets
       resetAll: () => {
         flushPersist()         // drain any pending debounced write before wiping
         localStorage.clear()
-        set({ ...DEFAULTS })
+        set(createStarterState())
       },
 
     }),
@@ -1816,7 +1920,17 @@ export const useStore = create(
       // (media data URLs included) on every set() janks the render loop.
       // The projection window mirrors the main window and never writes.
       storage: (() => {
-        const debouncedSetItem = debounce((key, value) => localStorage.setItem(key, JSON.stringify(value)), 500)
+        const debouncedSetItem = debounce((key, value) => {
+          try {
+            localStorage.setItem(key, JSON.stringify(value))
+            if (useStore.getState().ui.storageNotice) useStore.getState().setUi('storageNotice', null)
+          } catch (error) {
+            // Usually QuotaExceededError from inline media; keep running and tell the user.
+            console.error('[Lumen Lab] Could not save state:', error)
+            const notice = 'Storage full: recent changes are not being saved. Remove media or snapshots to free space.'
+            if (useStore.getState().ui.storageNotice !== notice) useStore.getState().setUi('storageNotice', notice)
+          }
+        }, 500)
         flushPersist = () => debouncedSetItem.flush()
         if (typeof window !== 'undefined') {
           window.addEventListener('beforeunload', () => debouncedSetItem.flush(), { once: true })
@@ -1830,7 +1944,7 @@ export const useStore = create(
           removeItem: (key) => localStorage.removeItem(key),
         }
       })(),
-      partialize: (state) => ({
+      partialize: (state) => dehydrateStoredMedia({
         schemaVersion: state.schemaVersion,
         media: state.media,
         mediaLibrary: state.mediaLibrary,
@@ -1844,18 +1958,21 @@ export const useStore = create(
         color: state.color,
         effects: state.effects,
         canvas: state.canvas,
-        projection: state.projection,
+        // Window and overlay flags describe this session only.
+        projection: { ...state.projection, outputWindowOpen: false, calibrating: false, editingSurfaces: false },
         snapshots: state.snapshots,
         scenes: state.scenes,
         userPresets: state.userPresets,
         audio: { ...state.audio, meters: DEFAULTS.audio.meters },
         flux: state.flux,
         animation: state.animation,
-        ui: { ...state.ui, exportRequest: null },
+        ui: { ...state.ui, exportRequest: null, storageNotice: null, resetNotice: null },
         midi: { ...state.midi, lastMsg: null },
       }),
-      merge: (persistedState, currentState) => {
-        const incomingVersion = persistedState?.schemaVersion
+      merge: (storedState, currentState) => {
+        const persistedState = storedState ? rehydrateStoredMedia(storedState) : storedState
+        if (!persistedState) return { ...currentState, ...createStarterState() }
+        const incomingVersion = persistedState.schemaVersion
         if (incomingVersion !== SCHEMA_VERSION) {
           localStorage.removeItem('lumen-storage')
           return {
@@ -1881,9 +1998,20 @@ export const useStore = create(
           animation: { ...currentState.animation, ...(persistedState?.animation || {}) },
           scenes: persistedState?.scenes || currentState.scenes,
           symmetry: { ...currentState.symmetry, ...(persistedState?.symmetry || {}) },
+          transforms: { ...currentState.transforms, ...(persistedState?.transforms || {}) },
+          warp: { ...currentState.warp, ...(persistedState?.warp || {}) },
+          displacement: { ...currentState.displacement, ...(persistedState?.displacement || {}) },
+          tiling: { ...currentState.tiling, ...(persistedState?.tiling || {}) },
+          canvas: { ...currentState.canvas, ...(persistedState?.canvas || {}) },
           generator: { ...currentState.generator, ...(persistedState?.generator || {}) },
           color: { ...currentState.color, ...(persistedState?.color || {}) },
-          projection: { ...currentState.projection, ...(persistedState?.projection || {}) },
+          projection: {
+            ...currentState.projection,
+            ...(persistedState?.projection || {}),
+            outputWindowOpen: false,
+            calibrating: false,
+            editingSurfaces: false,
+          },
         }
 
         return normalizeProjectionSourcesInState(mergedState)

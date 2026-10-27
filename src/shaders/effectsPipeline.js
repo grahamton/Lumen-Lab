@@ -4,7 +4,9 @@ import { RenderPipeline, Vector2 } from 'three/webgpu'
 import { Fn, convertToTexture, dot, fract, mix, pass, sin, step, time, uniform, uv, vec2, vec4 } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 
-const BLOOM_THRESHOLD = 0.2
+// Generators put out a lot of near-white; at 0.2 nearly every pixel bloomed and
+// any glow above ~0.3 washed the frame out to white.
+const BLOOM_THRESHOLD = 0.6
 const BLOOM_SMOOTHING = 0.9
 const BLOOM_RADIUS = 0.4
 // Measured against the old pmndrs Bloom (intensity = bloom * 2) so saved looks
@@ -42,36 +44,47 @@ export function createEffectsPipeline(renderer, scene, camera) {
   let bloomNode = null
   let activeKey = null
 
-  function build(useBloom, useShift, useGrain) {
+  // Only two things change the graph: whether any effect is on and whether
+  // bloom is on (it adds render passes). Shift and grain stay in the graph and fall back to a no-op
+  // at 0, so dialling them never recompiles shaders; three releases a program
+  // as soon as nothing uses it, so every rebuild was a fresh 100-250ms compile.
+  function build(useBloom, useEffects) {
     let output = sceneColor
-    if (useBloom) {
-      if (!bloomNode) {
-        bloomNode = bloom(sceneColor, 0.0, BLOOM_RADIUS, BLOOM_THRESHOLD)
-        bloomNode.smoothWidth.value = BLOOM_SMOOTHING
+    if (useEffects) {
+      // The shift is linear, so it is applied to the scene and bloom textures
+      // separately and summed. Shifting the combined vec4 needs convertToTexture
+      // on a composite node, which fails to compile on the WebGL2 backend.
+      output = chromaticShift(sceneColor, shiftOffset)
+      if (useBloom) {
+        if (!bloomNode) {
+          bloomNode = bloom(sceneColor, 0.0, BLOOM_RADIUS, BLOOM_THRESHOLD)
+          bloomNode.smoothWidth.value = BLOOM_SMOOTHING
+        }
+        output = vec4(output.rgb.add(chromaticShift(bloomNode.getTextureNode(), shiftOffset).rgb), output.a)
       }
-      output = vec4(sceneColor.rgb.add(bloomNode.rgb), sceneColor.a)
+      output = overlayGrain(output, grainOpacity)
     }
-    if (useShift) output = chromaticShift(output, shiftOffset)
-    if (useGrain) output = overlayGrain(output, grainOpacity)
     pipeline.outputNode = output
-    // Reproduces the old pmndrs composer so saved looks match: raw shader output
-    // with no effects, sRGB-encoded output once any effect is enabled.
-    pipeline.outputColorTransform = useBloom || useShift || useGrain
+    // Shader output is already display-ready. (The old pmndrs composer sRGB-encoded
+    // it whenever any effect was on, so a touch of grain lightened the whole frame.)
+    pipeline.outputColorTransform = false
     pipeline.needsUpdate = true
   }
 
   return {
-    /** Applies effect values; rebuilds the node graph only when an effect toggles on/off. */
+    /** Applies effect values; rebuilds the node graph only when bloom or the effects stage toggles. */
     update({ bloom: bloomValue = 0, chromaticAberration = 0, noise = 0, aspect = 1 }) {
       // Old pmndrs offset was [ca * 0.01, ca * 0.01] in width units, pointing up;
       // pass UVs here run top-down, hence the negative y.
       const shift = chromaticAberration * 0.01
       shiftOffset.value.set(shift, -shift * aspect)
       grainOpacity.value = noise
-      const key = `${bloomValue > 0}|${chromaticAberration > 0}|${noise > 0}`
+      const useBloom = bloomValue > 0
+      const useEffects = useBloom || chromaticAberration > 0 || noise > 0
+      const key = `${useBloom}|${useEffects}`
       if (key !== activeKey) {
         activeKey = key
-        build(bloomValue > 0, chromaticAberration > 0, noise > 0)
+        build(useBloom, useEffects)
       }
       if (bloomNode) bloomNode.strength.value = bloomValue * BLOOM_GAIN
     },

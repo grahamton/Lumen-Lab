@@ -75,6 +75,10 @@ export class MidiManager {
     if (command === 128 || (command === 144 && data2 === 0)) type = 'noteOff'
     if (command === 176) type = 'cc'
 
+    // Clock, active sensing, pitch bend and the like arrive constantly; they
+    // can't be mapped and would otherwise churn the store (and MIDI learn).
+    if (type === 'unknown') return
+
     const msg = {
       type,
       channel: channel + 1,

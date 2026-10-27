@@ -51,11 +51,22 @@ export function useProjectionStateBridge(isOutputWindow) {
       return () => channel.close()
     }
 
-    const pushState = () => {
-      channel.postMessage({
-        type: 'state-sync',
-        payload: selectProjectionPayload(useStore.getState()),
-      })
+    // Large, rarely-changing sections are only re-sent when their reference
+    // changes; structured-cloning inline media on every slider tick janked the UI.
+    const HEAVY_KEYS = ['media', 'mediaLibrary', 'scenes', 'userPresets']
+    let lastSent = {}
+    let outputWindowSeen = false
+
+    const pushState = ({ full = false } = {}) => {
+      const state = useStore.getState()
+      if (!full && !outputWindowSeen && !state.projection?.outputWindowOpen) return
+
+      const payload = selectProjectionPayload(state)
+      for (const key of HEAVY_KEYS) {
+        if (!full && payload[key] === lastSent[key]) delete payload[key]
+        else lastSent[key] = payload[key]
+      }
+      channel.postMessage({ type: 'state-sync', payload })
     }
 
     let pushTimer = null
@@ -73,11 +84,10 @@ export function useProjectionStateBridge(isOutputWindow) {
 
     channel.onmessage = (event) => {
       if (event.data?.type === 'request-sync') {
-        pushState()
+        outputWindowSeen = true
+        pushState({ full: true })
       }
     }
-
-    pushState()
 
     return () => {
       if (pushTimer) {

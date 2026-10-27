@@ -31,6 +31,7 @@ import {
 } from '../utils/projectionCanvasRegistry'
 import { isProjectionWindow } from '../utils/windowMode'
 import { publishCanvasFrame, subscribeCanvasFrames } from '../utils/canvasFrameBus'
+import { audioMeters, publishAudioMeters } from '../utils/audioMeterBus'
 
 const SYM_TYPE_MAP = { radial: 0, mirrorX: 1, mirrorY: 2 }
 const WARP_MAP     = { none: 0, polar: 1, 'log-polar': 2 }
@@ -40,14 +41,21 @@ const projectionWindowMode = isProjectionWindow()
 // `?renderer=webgl` forces the WebGL2 backend (troubleshooting escape hatch).
 let useWebGLBackend = new URLSearchParams(window.location.search).get('renderer') === 'webgl'
 const MAX_RENDERER_RECOVERIES = 3
+// Fragment cost scales with pixel count; 2x DPR was a 3-4x frame-rate hit.
+const MAX_DPR = [1, 1.5]
 let rendererRecoveries = 0
 const rendererLossListeners = new Set()
 
 // A lost GPU device (driver reset, unplugged eGPU, unsupported Linux stack)
 // stops rendering for good, so remount the canvases; after a WebGPU loss the
 // rest of the session uses WebGL2.
+let lastRendererLossAt = -Infinity
 function handleRendererLoss(info) {
   console.warn(`[Lumen Lab] ${info?.api ?? 'GPU'} device lost: ${info?.message ?? 'unknown reason'}`)
+  // One driver reset reports a loss per canvas; recover once for all of them.
+  const now = performance.now()
+  if (now - lastRendererLossAt < 1000) return
+  lastRendererLossAt = now
   if (rendererRecoveries >= MAX_RENDERER_RECOVERIES) return
   rendererRecoveries += 1
   if (info?.api === 'WebGPU') useWebGLBackend = true
@@ -264,7 +272,7 @@ function ProjectionSurfaceCanvas({ surface, sourceCanvas, sourceRect }) {
 }
 
 // The Inner Scene
-function VisualizerScene({ renderState = null, mediaDescriptor = null, preferImageElement = true, enableOutputActions = true, useMirroredAudio = false }) {
+function VisualizerScene({ renderState = null, mediaDescriptor = null, preferImageElement = true, enableOutputActions = true, useMirroredAudio = false, drawOutput = true }) {
   const {
     image,
     liveMedia,
@@ -456,7 +464,8 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
       timeRef.current += delta
       // Generator Time Logic: Only advance if animated
       if (generator.isAnimated !== false) { // Default to true if undefined
-        genTimeRef.current += delta
+        // param3 is the pattern speed for every generator: 50 = 1x, 0 = still, 100 = 2x.
+        genTimeRef.current += delta * ((generator.param3 ?? 50) / 50)
       }
     }
     uniformValues.uTime.value = timeRef.current
@@ -464,10 +473,15 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
 
     // Audio Analysis
     let bass = 0, mid = 0, high = 0
-    if ((projectionWindowMode || useMirroredAudio) && audioState.enabled) {
+    if (projectionWindowMode && audioState.enabled) {
+      // The output window has no analyser; levels arrive through the store sync.
       bass = audioState.meters?.bass || 0
       mid = audioState.meters?.mid || 0
       high = audioState.meters?.high || 0
+    } else if (useMirroredAudio && audioState.enabled) {
+      bass = audioMeters.bass
+      mid = audioMeters.mid
+      high = audioMeters.high
     } else if (audioState.enabled && audioReady) {
       const freq = getFrequencyData()
       // Normalize 0-255 to 0-1 range
@@ -479,9 +493,13 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
       high = (freq.high / 255) * sens
     }
 
-    if (!projectionWindowMode && enableOutputActions && !useMirroredAudio && audioState.enabled && stateThree.clock.elapsedTime - lastMeterSyncRef.current > 0.05) {
-      lastMeterSyncRef.current = stateThree.clock.elapsedTime
-      setAudio('meters', { bass, mid, high })
+    if (!projectionWindowMode && enableOutputActions && !useMirroredAudio && audioState.enabled) {
+      publishAudioMeters(bass, mid, high)
+      // Only the separate output window needs levels in the store.
+      if (useStore.getState().projection.outputWindowOpen && stateThree.clock.elapsedTime - lastMeterSyncRef.current > 0.05) {
+        lastMeterSyncRef.current = stateThree.clock.elapsedTime
+        setAudio('meters', { bass, mid, high })
+      }
     }
 
     // --- FLUX DRIFT LOGIC ---
@@ -577,6 +595,9 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
       noise: perfCap ? Math.min(effects.noise, 0.5) : effects.noise,
       aspect: size.width / size.height,
     })
+    // Hidden behind mapped shapes that don't use it: keep timing and audio
+    // analysis running, skip the GPU work.
+    if (!drawOutput) return
     pipeline.render()
     publishCanvasFrame(gl.domElement)
   }, 1) // priority > 0: this loop owns rendering (post-processing pipeline)
@@ -644,11 +665,13 @@ export function CanvasGL() {
     activeSceneDraftState,
     projection,
     userPresets,
+    recordingIsActive,
     setProjection,
     setProjectionPoint,
     setProjectionPoints,
   } = useStore(
     useShallow((state) => ({
+      recordingIsActive: state.recording.isActive,
       canvasWidth:   state.canvas.width,
       canvasHeight:  state.canvas.height,
       canvasAspect:  state.canvas.aspect,
@@ -796,7 +819,7 @@ export function CanvasGL() {
             key={rendererGeneration}
             gl={createRenderer}
             flat
-            dpr={lowResPreview ? 0.75 : undefined}
+            dpr={lowResPreview ? 0.75 : MAX_DPR}
             camera={{ position: [0, 0, 1] }}
             onCreated={({ gl }) => setSourceCanvasElement(gl.domElement)}
           >
@@ -804,6 +827,7 @@ export function CanvasGL() {
               renderState={getEffectiveRenderState}
               enableOutputActions={!projectionWindowMode}
               useMirroredAudio={projectionWindowMode}
+              drawOutput={!surfaceModeActive || hasVisibleLiveSurface || recordingIsActive}
             />
           </Canvas>
         </div>
@@ -821,7 +845,7 @@ export function CanvasGL() {
           mediaDescriptor={descriptor.mediaDescriptor}
           width={rect.width}
           height={rect.height}
-          dpr={lowResPreview ? 0.75 : undefined}
+          dpr={lowResPreview ? 0.75 : MAX_DPR}
           onCanvasReady={registerAuxSourceCanvas}
         />
       ))}

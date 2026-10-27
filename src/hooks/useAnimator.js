@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useShallow } from 'zustand/shallow'
 import { useStore } from '../store/useStore'
 
 // Exported for tests
@@ -76,7 +77,12 @@ export const interpolateState = (s1, s2, t, out) => {
 }
 
 export function useAnimator(enabled = true) {
-  const { snapshots, animation, loadSnapshot, setAnimation } = useStore()
+  const { snapshots, animation, loadSnapshot, setAnimation } = useStore(useShallow((state) => ({
+    snapshots: state.snapshots,
+    animation: state.animation,
+    loadSnapshot: state.loadSnapshot,
+    setAnimation: state.setAnimation,
+  })))
   const requestRef = useRef()
   const startTimeRef = useRef()
   // const currentIndexRef = useRef(0) // Removed: Use store's activeStep for UI consistency if needed, checking below
@@ -131,7 +137,7 @@ export function useAnimator(enabled = true) {
     const progress = easeFn(rawT)
 
     // Determine Indices
-    let currIdx = animation.activeStep
+    let currIdx = animation.activeStep ?? 0
 
     // GUARD: Index out of bounds (e.g. after deletion)
     if (currIdx >= snapshots.length || currIdx < 0) {
@@ -159,7 +165,10 @@ export function useAnimator(enabled = true) {
     const s1 = snapshots[currIdx]
     const s2 = snapshots[nextIdx]
 
-    if (!s1 || !s2) return
+    if (!s1 || !s2) {
+      requestRef.current = requestAnimationFrame(animateFrame)
+      return
+    }
 
     // Interpolate & Load — reuse persistent object to avoid per-frame GC allocations.
     if (!interpResultRef.current) {
@@ -169,7 +178,7 @@ export function useAnimator(enabled = true) {
       }
     }
     const currentState = interpolateState(s1, s2, progress, interpResultRef.current)
-    if (currentState) loadSnapshot(currentState)
+    if (currentState) loadSnapshot(currentState, { recordUndo: false })
 
     // Cycle Complete?
     if (elapsed >= safeDuration) {

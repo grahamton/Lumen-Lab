@@ -38,7 +38,8 @@ describe('MIDI Integration', () => {
     store.setMidiMapping(mappingKey, 'generator.param1')
 
     // 2. Initial Value
-    expect(useStore.getState().generator.param1).toBe(50) // Default
+    store.setGenerator('param1', 50)
+    expect(useStore.getState().generator.param1).toBe(50)
 
     // 3. Send MIDI Message (value 1.0 => Max 100)
     store.setMidi('lastMsg', { type: 'cc', channel: 1, note: 20, value: 1.0 })

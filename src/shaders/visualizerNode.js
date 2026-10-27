@@ -167,9 +167,11 @@ export function createVisualizerMaterial() {
   }).setLayout({ name: 'llVoronoi', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
 
   const basicGrid = Fn(([p]) => {
-    const st = p.mul(uGenParams.x).mul(0.2)
+    // Slow diagonal drift so the grid moves like the other generators; its pace
+    // follows the speed control through uGenTime.
+    const st = p.mul(uGenParams.x).mul(0.2).add(uGenTime.mul(0.15))
     const thick = uGenParams.y.mul(0.005)
-    const soft = uGenParams.z.mul(0.002).add(0.001)
+    const soft = float(0.101)
     const grid = abs(fract(st.sub(0.5)).sub(0.5))
     const lineX = smoothstep(thick.sub(soft), thick.add(soft), grid.x)
     const lineY = smoothstep(thick.sub(soft), thick.add(soft), grid.y)
@@ -206,7 +208,8 @@ export function createVisualizerMaterial() {
 
   const fractalNoise = Fn(([p]) => {
     const st = p.mul(uGenParams.x).mul(0.05)
-    const speed = uGenTime.mul(uGenParams.z.mul(0.1))
+    // Speed (param3) is applied to uGenTime for every generator in CanvasGL.
+    const speed = uGenTime.mul(5.0)
     const q = vec2(fbm(st), fbm(st.add(vec2(1.0))))
     const r = vec2(
       fbm(st.add(q).add(vec2(1.7, 9.2)).add(speed.mul(0.15))),
@@ -366,7 +369,7 @@ export function createVisualizerMaterial() {
       color.assign(mix(color, sol, uEffects.z.mul(0.01)))
     })
 
-    If(uPosterize.lessThan(255.0), () => {
+    If(uPosterize.lessThan(32.5), () => {
       color.assign(floor(color.mul(uPosterize)).div(uPosterize))
     })
 

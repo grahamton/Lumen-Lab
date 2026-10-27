@@ -11,10 +11,22 @@ import { isProjectionWindow } from './utils/windowMode'
 import { midiManager } from './core/MidiManager'
 
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { Toasts } from './components/Toasts'
 
 const LazyCanvas = lazy(() => import('./components/CanvasGL').then(mod => ({ default: mod.CanvasGL })))
 const PROJECTION_PATTERN_MODES = ['off', 'overlay', 'replace']
 const PROJECTION_PATTERN_TYPES = ['grid', 'crosshair', 'checker']
+const PATTERN_MODE_LABELS = { off: 'Alignment grid off', overlay: 'Alignment grid: on top', replace: 'Alignment grid only' }
+const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'number', 'password', 'url', 'tel'])
+
+// Shortcuts stay live on sliders, toggles and buttons; only fields that take
+// typed text (and selects, which use letters to jump) swallow keys.
+function isTextEntryTarget(target) {
+  if (!target) return false
+  if (target.isContentEditable) return true
+  if (target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return true
+  return target.tagName === 'INPUT' && TEXT_INPUT_TYPES.has(target.type || 'text')
+}
 const projectionWindowMode = isProjectionWindow()
 
 function App() {
@@ -38,6 +50,8 @@ function App() {
   })
   const controlsOpen = useStore((state) => state.ui.controlsOpen)
   const recordingIsActive = useStore((state) => state.recording.isActive)
+  const blackoutActive = useStore((state) => Boolean(state.projection?.blackout))
+  const storageNotice = useStore((state) => state.ui.storageNotice)
 
   useEffect(() => {
     if (projectionWindowMode) {
@@ -65,29 +79,44 @@ function App() {
 
     const handleKeyDown = (e) => {
       const store = useStore.getState()
+      const typing = isTextEntryTarget(e.target)
 
-      // Undo / Redo (always works, even with input focus)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      // Undo / Redo. Text fields keep their own undo.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z' && !typing) {
         e.preventDefault()
-        store.undo()
+        const redo = e.shiftKey
+        const stack = redo ? store.redoStack : store.undoStack
+        if (stack.length === 0) {
+          store.notify(redo ? 'Nothing to redo' : 'Nothing to undo')
+        } else {
+          if (redo) store.redo()
+          else store.undo()
+          store.notify(redo ? 'Redo' : 'Undo')
+        }
         return
       }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault()
-        store.redo()
+
+      // Leave browser/OS combos (Ctrl+R, Ctrl+S, Alt+F...) alone, and don't
+      // re-toggle while a key is held down.
+      if (typing || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
+
+      if (e.key === '?') {
+        store.toggleHelp()
         return
       }
-
-      // Ignore if typing in an input
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      // The help dialog handles its own keys (Esc closes it).
+      if (store.ui.helpOpen) return
 
       switch (e.key.toLowerCase()) {
         case 'h':
           store.toggleControls(!store.ui.controlsOpen)
           break
-        case 'b':
-          store.setProjection('blackout', !store.projection?.blackout)
+        case 'b': {
+          const blackout = !store.projection?.blackout
+          store.setProjection('blackout', blackout)
+          store.notify(blackout ? 'Blackout on · press B to bring it back' : 'Blackout off')
           break
+        }
         case 'escape':
           if (store.projection?.calibrating) {
             store.setProjection('calibrating', false)
@@ -97,32 +126,35 @@ function App() {
           if (e.shiftKey) {
             const currentPatternType = store.projection?.patternType || 'grid'
             const typeIndex = PROJECTION_PATTERN_TYPES.indexOf(currentPatternType)
-            store.setProjection('patternType', PROJECTION_PATTERN_TYPES[(typeIndex + 1) % PROJECTION_PATTERN_TYPES.length])
+            const nextType = PROJECTION_PATTERN_TYPES[(typeIndex + 1) % PROJECTION_PATTERN_TYPES.length]
+            store.setProjection('patternType', nextType)
+            store.notify(`Grid style: ${nextType}`)
             break
           }
 
           const currentPatternMode = store.projection?.patternMode || 'off'
           const modeIndex = PROJECTION_PATTERN_MODES.indexOf(currentPatternMode)
-          store.setProjection('patternMode', PROJECTION_PATTERN_MODES[(modeIndex + 1) % PROJECTION_PATTERN_MODES.length])
+          const nextMode = PROJECTION_PATTERN_MODES[(modeIndex + 1) % PROJECTION_PATTERN_MODES.length]
+          store.setProjection('patternMode', nextMode)
+          store.notify(PATTERN_MODE_LABELS[nextMode])
           break
         }
         case 's':
           store.addSnapshot()
-          // Visual feedback could be added here
+          store.notify(`Look ${useStore.getState().snapshots.length} saved`)
           break
-        case 'r':
-          // Toggle Recording
-          store.setRecording('isActive', !store.recording.isActive)
+        case 'r': {
+          const recording = !store.recording.isActive
+          store.setRecording('isActive', recording)
+          store.notify(recording ? 'Recording · press R to stop' : 'Recording stopped · saving video')
           break
+        }
         case 'f':
           if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen()
+            document.documentElement.requestFullscreen?.().catch(() => store.notify('Fullscreen is not available here'))
           } else {
-            document.exitFullscreen()
+            document.exitFullscreen?.().catch(() => {})
           }
-          break
-        case 'backspace':
-          // Optional: Reset param helper? Maybe too dangerous.
           break
       }
     }
@@ -146,8 +178,8 @@ function App() {
       {!projectionWindowMode && !hasVisualSource && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="bg-black/60 border border-white/10 rounded-xl px-6 py-4 text-center max-w-xs">
-            <div className="text-sm font-semibold text-white mb-1">Start creating</div>
-            <div className="text-xs text-neutral-400">Upload an image/video or pick a generator to begin.</div>
+            <div className="text-sm font-semibold text-white mb-1">Nothing to show yet</div>
+            <div className="text-xs text-neutral-400">Pick a pattern, drop in a picture or video, or press Surprise Me.</div>
           </div>
         </div>
       )}
@@ -162,13 +194,30 @@ function App() {
         </button>
       )}
 
-      {/* Recording Indicator */}
-      {!projectionWindowMode && recordingIsActive && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 pointer-events-none animate-pulse">
-          <div className="w-3 h-3 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
-          <span className="text-red-500 font-bold font-mono text-xs tracking-widest uppercase">REC</span>
+      {/* Live-state pills: things that change what the audience sees */}
+      {!projectionWindowMode && (recordingIsActive || blackoutActive) && (
+        <div className="fixed top-4 right-4 z-50 flex flex-col items-end gap-2 pointer-events-none">
+          {recordingIsActive && (
+            <div className="flex items-center gap-2 animate-pulse">
+              <div className="w-3 h-3 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+              <span className="text-red-500 font-bold font-mono text-xs tracking-widest uppercase">REC</span>
+            </div>
+          )}
+          {blackoutActive && (
+            <div className="rounded-full border border-amber-400/60 bg-black/80 px-3 py-1 font-mono text-xs font-bold tracking-widest text-amber-300">
+              BLACKOUT · B
+            </div>
+          )}
         </div>
       )}
+
+      {!projectionWindowMode && storageNotice && (
+        <div role="alert" className="fixed top-4 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-lg border border-amber-400/50 bg-neutral-950/90 px-4 py-2 text-xs text-amber-200 shadow-lg">
+          {storageNotice}
+        </div>
+      )}
+
+      {!projectionWindowMode && <Toasts />}
 
       {!projectionWindowMode && <HelpModal />}
     </div>
