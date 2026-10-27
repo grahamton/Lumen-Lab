@@ -1,24 +1,10 @@
+import React, { useCallback } from 'react'
 import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
+import { Toggle } from './Toggle'
 
-function Toggle({ label, isOn, onToggle }) {
-  return (
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-[9px] tracking-widest text-neutral-500">{label}</span>
-      <button
-        onClick={onToggle}
-        role="switch"
-        aria-checked={isOn}
-        className={`w-7 h-3.5 rounded-full relative transition-colors ${isOn ? 'bg-cyan-950 border border-cyan-400' : 'bg-neutral-700'}`}
-      >
-        <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-transform ${isOn ? 'translate-x-3.5 bg-cyan-400' : 'translate-x-0.5 bg-neutral-500'}`} />
-      </button>
-    </div>
-  )
-}
-
-export function SectionEffects({ onInteract }) {
+export const SectionEffects = React.memo(function SectionEffects({ onInteract }) {
   const { effectsBloom, effectsCA, effectsNoise, audioEnabled, audioSensitivity, setEffect, setAudio, canvasShape, setCanvas } = useStore(
     useShallow((state) => {
       const effectiveSceneState = getEffectiveAuthoredSceneState(state)
@@ -36,38 +22,31 @@ export function SectionEffects({ onInteract }) {
     })
   )
 
-  function wrap(fn) {
-    return (...args) => { onInteract?.(); fn(...args) }
-  }
-
   const circleCrop = canvasShape === 'circle'
+
+  const toggleMusic = useCallback(() => {
+    onInteract?.()
+    setAudio('enabled', !audioEnabled)
+  }, [onInteract, setAudio, audioEnabled])
+
+  const toggleRound = useCallback(() => {
+    onInteract?.()
+    setCanvas('shape', circleCrop ? 'rectangle' : 'circle')
+  }, [onInteract, setCanvas, circleCrop])
 
   return (
     <div>
-      <ControlGroup section="effects" param="bloom"               value={effectsBloom}  onChange={wrap((v) => setEffect('bloom', v))} />
-      <ControlGroup section="effects" param="chromaticAberration" value={effectsCA}     onChange={wrap((v) => setEffect('chromaticAberration', v))} />
-      <ControlGroup section="effects" param="noise"               value={effectsNoise}  onChange={wrap((v) => setEffect('noise', v))} />
+      <ControlGroup section="effects" param="bloom"               value={effectsBloom} set={setEffect} onInteract={onInteract} />
+      <ControlGroup section="effects" param="chromaticAberration" value={effectsCA}    set={setEffect} onInteract={onInteract} />
+      <ControlGroup section="effects" param="noise"               value={effectsNoise} set={setEffect} onInteract={onInteract} />
 
-      <Toggle
-        label="AUDIO REACTIVE"
-        isOn={audioEnabled}
-        onToggle={wrap(() => setAudio('enabled', !audioEnabled))}
-      />
+      <Toggle label="REACT TO MUSIC" help="audio.enabled" isOn={audioEnabled} onToggle={toggleMusic} />
 
       {audioEnabled && (
-        <ControlGroup
-          section="audio"
-          param="sensitivity"
-          value={audioSensitivity}
-          onChange={wrap((v) => setAudio('sensitivity', v))}
-        />
+        <ControlGroup section="audio" param="sensitivity" value={audioSensitivity} set={setAudio} onInteract={onInteract} />
       )}
 
-      <Toggle
-        label="CIRCLE CROP"
-        isOn={circleCrop}
-        onToggle={wrap(() => setCanvas('shape', circleCrop ? 'rectangle' : 'circle'))}
-      />
+      <Toggle label="ROUND FRAME" help="canvas.shape" isOn={circleCrop} onToggle={toggleRound} />
     </div>
   )
-}
+})
