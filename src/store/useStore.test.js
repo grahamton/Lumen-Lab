@@ -98,9 +98,13 @@ describe('Zustand Store', () => {
       resetAll()
     })
 
-    // Verify Default State
+    // Back to the starter look (a moving preset), with audio off
     state = useStore.getState()
-    expect(state.transforms.scale).toBe(1)
+    const starter = presets.find((preset) => preset.name === 'Kaleido Bloom')
+    expect(state.transforms.scale).toBe(starter.state.transforms.scale)
+    expect(state.generator.type).toBe(starter.state.generator.type)
+    expect(state.color.hue).toBe(0)
+    expect(state.flux.enabled).toBe(true)
     expect(state.audio.enabled).toBe(false)
   })
 

@@ -5,7 +5,9 @@ import { RenderPipeline, Vector2 } from 'three/webgpu'
 import { Fn, convertToTexture, dot, fract, mix, pass, sin, step, time, uniform, uv, vec2, vec4 } from 'three/tsl'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
 
-const BLOOM_THRESHOLD = 0.2
+// Generators put out a lot of near-white; at 0.2 nearly every pixel bloomed and
+// any glow above ~0.3 washed the frame out to white.
+const BLOOM_THRESHOLD = 0.6
 const BLOOM_SMOOTHING = 0.9
 const BLOOM_RADIUS = 0.4
 // Measured against the old pmndrs Bloom (intensity = bloom * 2) so saved looks
@@ -68,9 +70,9 @@ export function createEffectsPipeline(renderer, scene, camera, createEffectsNode
     if (useCA) output = chromaticShift(output, shiftOffset)
     if (useGrain) output = overlayGrain(output, grainOpacity)
     pipeline.outputNode = output
-    // Reproduces the old pmndrs composer so saved looks match: raw shader output
-    // with no effects, sRGB-encoded output once any effect is enabled.
-    pipeline.outputColorTransform = useBloom || useCA || useGrain
+    // Shader output is already display-ready. (The old pmndrs composer sRGB-encoded
+    // it whenever any effect was on, so a touch of grain lightened the whole frame.)
+    pipeline.outputColorTransform = false
     pipeline.needsUpdate = true
   }
 

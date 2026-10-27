@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, screen, session, shell } from 'electron'
 import process from 'process'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 let mainWindow = null
@@ -19,10 +19,21 @@ app.commandLine.appendSwitch('enable-zero-copy')
 
 const ALLOWED_PERMISSIONS = new Set(['media', 'midi', 'midiSysex', 'fullscreen', 'clipboard-sanitized-write'])
 
+// Only the app's own page counts: any file:// prefix would let a file dropped
+// on the window replace the app (with the preload still attached).
 function isAppUrl(url) {
-  if (app.isPackaged) return url.startsWith('file://')
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (app.isPackaged) {
+    const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html'))
+    return parsed.protocol === 'file:' && parsed.pathname === indexUrl.pathname
+  }
   const devPort = process.env.VITE_DEV_PORT || '5173'
-  return url.startsWith(`http://localhost:${devPort}`)
+  return parsed.origin === `http://localhost:${devPort}`
 }
 
 // Keep windows on the app: no navigation away (e.g. a file dropped on the
