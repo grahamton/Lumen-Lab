@@ -38,6 +38,9 @@ export function useVideoRecorder(gl) {
         mirror.width = source.width
         mirror.height = source.height
       }
+      // Clear first: drawing over the last frame would leave ghosts wherever the
+      // source is transparent (circle crop, media moved off its old bounds).
+      mirrorContext.clearRect(0, 0, mirror.width, mirror.height)
       mirrorContext.drawImage(source, 0, 0)
     })
 
