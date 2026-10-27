@@ -5,9 +5,6 @@ import { presets } from '../../presets'
 import {
   getActiveAuthoredSceneDraftState,
   getActiveAuthoredSceneId,
-  getActiveSceneEditorHasLocalEdits,
-  getActiveSceneEditorMode,
-  getActiveSceneEditorSourceSurfaceName,
 } from '../../store/useStore'
 import {
   getDraftAwareSceneState,
@@ -17,10 +14,11 @@ import {
   hasRenderableLiveProjectionSurface,
 } from '../../utils/projectionSources'
 
+// Visible labels are plain language; the `value`s are the store values and must not change.
 const PATTERN_MODES = [
   { value: 'off', label: 'OFF' },
-  { value: 'overlay', label: 'OVERLAY' },
-  { value: 'replace', label: 'REPLACE' },
+  { value: 'overlay', label: 'ON TOP' },
+  { value: 'replace', label: 'GRID ONLY' },
 ]
 
 const PATTERN_TYPES = [
@@ -30,28 +28,41 @@ const PATTERN_TYPES = [
 ]
 
 const SURFACE_BLEND_MODES = [
-  { value: 'screen', label: 'SCREEN' },
-  { value: 'normal', label: 'NORMAL' },
-  { value: 'add', label: 'ADD' },
-  { value: 'multiply', label: 'MULT' },
+  { value: 'screen', label: 'LIGHTEN' },
+  { value: 'normal', label: 'SOLID' },
+  { value: 'add', label: 'GLOW' },
+  { value: 'multiply', label: 'DARKEN' },
 ]
 
+const BLEND_LABELS = Object.fromEntries(SURFACE_BLEND_MODES.map(({ value, label }) => [value, label]))
+
 const SURFACE_EDIT_MODES = [
-  { value: 'warp', label: 'WARP' },
-  { value: 'mask', label: 'MASK' },
+  { value: 'warp', label: 'MOVE CORNERS' },
+  { value: 'mask', label: 'CUT SHAPE' },
 ]
+
+const BTN = 'rounded border px-2 py-1.5 text-[8px] tracking-[0.14em] transition-colors'
+const BTN_PRIMARY = `${BTN} border-cyan-400/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20`
+const BTN_NEUTRAL = `${BTN} border-neutral-700 bg-neutral-800 text-neutral-300 hover:border-neutral-500`
+const BTN_WARN = `${BTN} border-amber-500/40 bg-amber-400/10 text-amber-100 hover:bg-amber-400/20`
+const BTN_DANGER = `${BTN} border-red-900/50 bg-red-950/20 text-red-300 hover:border-red-500`
+const LABEL = 'text-[9px] tracking-widest text-neutral-500'
+
+function plural(count, one, many) {
+  return `${count} ${count === 1 ? one : many}`
+}
 
 function getSceneOriginLabel(scene) {
   const originType = scene?.origin?.type
   const originLabel = scene?.origin?.label
 
   if (originLabel) return originLabel.toUpperCase()
-  if (originType === 'live') return 'LIVE OUTPUT'
-  if (originType === 'scene') return 'SCENE FORK'
-  if (originType === 'media') return 'MEDIA SHORTCUT'
-  if (originType === 'builtin') return 'BUILT-IN SHORTCUT'
-  if (originType === 'user') return 'USER PRESET SHORTCUT'
-  return 'SOURCE UNKNOWN'
+  if (originType === 'live') return 'MAIN VISUAL'
+  if (originType === 'scene') return 'COPY OF A LOOK'
+  if (originType === 'media') return 'MEDIA'
+  if (originType === 'builtin') return 'PRESET'
+  if (originType === 'user') return 'MY PRESET'
+  return 'UNKNOWN'
 }
 
 function getSceneContentLabel(scene, activeSceneId = null, activeSceneDraftState = null) {
@@ -65,18 +76,33 @@ function getSceneContentLabel(scene, activeSceneId = null, activeSceneDraftState
     : `GENERATOR · ${(sceneState?.generator?.type || 'none').toUpperCase()}`
 }
 
-function Toggle({ label, value, onChange }) {
+// Plain-language label for a surface source (store meta labels are technical).
+function getFriendlySourceLabel(meta) {
+  if (!meta || meta.isLive) return 'MAIN VISUAL'
+  if (!meta.isValid) return 'SOURCE MISSING'
+  return String(meta.label || '')
+    .replace(/^SCENE · /, 'LOOK · ')
+    .replace(/^BUILT-IN · /, 'PRESET · ')
+    .replace(/^USER · /, 'MY PRESET · ')
+}
+
+function Hint({ children, tone = 'muted' }) {
+  const color = tone === 'warn' ? 'text-amber-200' : 'text-neutral-500'
+  return <p className={`mt-1.5 text-[9px] leading-snug ${color}`}>{children}</p>
+}
+
+function Toggle({ label, value, onChange, help, title }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <div>
-        <div className="text-[9px] tracking-widest text-neutral-500">{label}</div>
-      </div>
+    <div className="mb-3 flex items-center justify-between gap-3" data-help={help} title={title}>
+      <div className="min-w-0 truncate text-[9px] tracking-widest text-neutral-500">{label}</div>
       <button
         type="button"
         onClick={onChange}
         role="switch"
         aria-checked={value}
-        className={`relative h-4 w-8 rounded-full border transition-colors ${
+        aria-label={label}
+        title={title}
+        className={`relative h-4 w-8 shrink-0 rounded-full border transition-colors ${
           value ? 'border-cyan-400 bg-cyan-950' : 'border-neutral-700 bg-neutral-800'
         }`}
       >
@@ -86,17 +112,78 @@ function Toggle({ label, value, onChange }) {
   )
 }
 
+function SegmentRow({ options, value, onChange, help, title }) {
+  return (
+    <div className="flex gap-1" data-help={help} title={title}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          aria-pressed={value === option.value}
+          className={`min-w-0 flex-1 truncate rounded border px-0.5 py-1.5 text-[8px] tracking-wide transition-colors ${
+            value === option.value
+              ? 'border-cyan-400 bg-cyan-950 text-cyan-300'
+              : 'border-neutral-700 bg-neutral-800 text-neutral-400 hover:border-neutral-500'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Two-click destructive button: first click arms ("SURE?"), second click runs onConfirm.
+function ConfirmButton({ id, armed, setArmed, onConfirm, label, className, help, title }) {
+  const isArmed = armed === id
+  return (
+    <button
+      type="button"
+      data-help={help}
+      title={isArmed ? 'Click again to confirm' : title}
+      onClick={() => {
+        if (isArmed) {
+          setArmed(null)
+          onConfirm()
+        } else {
+          setArmed(id)
+        }
+      }}
+      onBlur={() => { if (isArmed) setArmed(null) }}
+      className={`${className} ${isArmed ? '!border-red-400 !bg-red-900/60 !text-red-100' : ''}`}
+    >
+      {isArmed ? 'SURE?' : label}
+    </button>
+  )
+}
+
+function MoreToggle({ open, onToggle, help }) {
+  return (
+    <button
+      type="button"
+      data-help={help}
+      title="More actions"
+      aria-label="More actions"
+      aria-expanded={open}
+      onClick={onToggle}
+      className={`${BTN} min-w-[28px] shrink-0 ${open ? 'border-cyan-400 bg-cyan-950 text-cyan-300' : 'border-neutral-700 bg-neutral-800 text-neutral-300 hover:border-neutral-500'}`}
+    >
+      ⋯
+    </button>
+  )
+}
+
 export function SectionOutput({ onInteract }) {
   const [displays, setDisplays] = useState([])
+  const [armed, setArmed] = useState(null)
+  const [openMenu, setOpenMenu] = useState(null)
   const {
     mediaLibrary,
     projection,
     scenes,
     activeSceneId,
     activeSceneDraftState,
-    activeSceneEditorMode,
-    activeSceneEditorSourceSurfaceName,
-    activeSceneEditorHasLocalEdits,
     userPresets,
     saveScene,
     captureProjectionSurfaceAsScene,
@@ -106,7 +193,6 @@ export function SectionOutput({ onInteract }) {
     captureSceneState,
     loadSceneToLive,
     startSceneEdit,
-    stopSceneEdit,
     deleteScene,
     assignSceneToSurface,
     assignProjectionSurfaceSource,
@@ -134,9 +220,6 @@ export function SectionOutput({ onInteract }) {
       scenes: state.scenes,
       activeSceneId: getActiveAuthoredSceneId(state),
       activeSceneDraftState: getActiveAuthoredSceneDraftState(state),
-      activeSceneEditorMode: getActiveSceneEditorMode(state),
-      activeSceneEditorSourceSurfaceName: getActiveSceneEditorSourceSurfaceName(state),
-      activeSceneEditorHasLocalEdits: getActiveSceneEditorHasLocalEdits(state),
       userPresets: state.userPresets,
       saveScene: state.saveScene,
       captureProjectionSurfaceAsScene: state.captureProjectionSurfaceAsScene,
@@ -146,7 +229,6 @@ export function SectionOutput({ onInteract }) {
       captureSceneState: state.captureSceneState,
       loadSceneToLive: state.loadSceneToLive,
       startSceneEdit: state.startSceneEdit,
-      stopSceneEdit: state.stopSceneEdit,
       deleteScene: state.deleteScene,
       assignSceneToSurface: state.assignSceneToSurface,
       assignProjectionSurfaceSource: state.assignProjectionSurfaceSource,
@@ -168,6 +250,9 @@ export function SectionOutput({ onInteract }) {
       removeProjectionSurfaceMaskPoint: state.removeProjectionSurfaceMaskPoint,
       resetProjectionSurfaceMask: state.resetProjectionSurfaceMask,
     }))
+  )
+  const [advancedOpen, setAdvancedOpen] = useState(
+    () => (projection.surfaces?.length || 0) > 0 || (scenes?.length || 0) > 0 || Boolean(activeSceneId)
   )
   const selectedSurface = projection.surfaces?.find((surface) => surface.id === projection.selectedSurfaceId) || null
   const projectionSourceOptions = {
@@ -191,11 +276,11 @@ export function SectionOutput({ onInteract }) {
   const hasVisibleLiveSurface = hasRenderableLiveProjectionSurface(projection, projectionSourceOptions)
   const hasMixedStageState = liveSurfaceCount > 0 && independentSurfaceCount > 0
   const sourceOptions = [
-    { value: 'live:live', label: 'LIVE OUTPUT' },
-    ...(mediaLibrary || []).map((asset) => ({ value: `media:${asset.id}`, label: `NEW SCENE FROM MEDIA · ${asset.name}` })),
-    ...(scenes || []).map((scene) => ({ value: `scene:${scene.id}`, label: `SCENE · ${scene.name}` })),
-    ...presets.map((preset, index) => ({ value: `builtin:${index}`, label: `NEW SCENE FROM BUILT-IN · ${preset.name}` })),
-    ...(userPresets || []).map((preset) => ({ value: `user:${preset.id}`, label: `NEW SCENE FROM USER · ${preset.name}` })),
+    { value: 'live:live', label: 'MAIN VISUAL' },
+    ...(mediaLibrary || []).map((asset) => ({ value: `media:${asset.id}`, label: `NEW LOOK FROM MEDIA · ${asset.name}` })),
+    ...(scenes || []).map((scene) => ({ value: `scene:${scene.id}`, label: `LOOK · ${scene.name}` })),
+    ...presets.map((preset, index) => ({ value: `builtin:${index}`, label: `NEW LOOK FROM PRESET · ${preset.name}` })),
+    ...(userPresets || []).map((preset) => ({ value: `user:${preset.id}`, label: `NEW LOOK FROM MY PRESET · ${preset.name}` })),
   ]
   const selectedSurfaceAssignedScene = selectedSurface?.sourceMode === 'scene'
     ? (scenes || []).find((scene) => String(scene.id) === String(selectedSurface.sourceId)) || null
@@ -212,9 +297,6 @@ export function SectionOutput({ onInteract }) {
     ? sceneUsageCountById.get(selectedSurfaceAssignedScene.id) || 0
     : 0
   const selectedSurfaceSceneIsShared = selectedSceneUsageCount > 1
-  const activeEditedScene = activeSceneId
-    ? (scenes || []).find((scene) => String(scene.id) === String(activeSceneId)) || null
-    : null
 
   function wrap(fn) {
     return (...args) => {
@@ -222,6 +304,16 @@ export function SectionOutput({ onInteract }) {
       fn(...args)
     }
   }
+
+  function toggleMenu(id) {
+    setOpenMenu((current) => (current === id ? null : id))
+  }
+
+  useEffect(() => {
+    if (!armed) return undefined
+    const timer = setTimeout(() => setArmed(null), 3500)
+    return () => clearTimeout(timer)
+  }, [armed])
 
   useEffect(() => {
     if (!window.electronAPI?.listProjectionDisplays) return undefined
@@ -246,144 +338,90 @@ export function SectionOutput({ onInteract }) {
     }
   }, [projection.displayId, setProjection])
 
+  const sourceHint = selectedSurfaceSourceMeta?.isLive
+    ? 'Follows the left panel.'
+    : selectedSurfaceSourceMeta && !selectedSurfaceSourceMeta.isValid
+      ? 'This shape’s source is missing.'
+      : 'Has its own look. Left-panel changes don’t affect it.'
+
   return (
-    <div>
+    <div className="min-w-0 overflow-x-hidden">
+      {/* ───────── PROJECTOR (always visible) ───────── */}
       <Toggle
-        label="PROJECTION OUTPUT"
+        label="PROJECTION ON"
+        help="output.projection"
+        title="Send the picture through the projector mapping layer."
         value={projection.enabled}
         onChange={wrap(() => setProjection('enabled', !projection.enabled))}
       />
-      <Toggle
-        label="CALIBRATION OVERLAY"
-        value={projection.calibrating}
-        onChange={wrap(() => setProjection('calibrating', !projection.calibrating))}
-      />
-      <Toggle
-        label="BLACKOUT"
-        value={projection.blackout}
-        onChange={wrap(() => setProjection('blackout', !projection.blackout))}
-      />
 
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-[10px] leading-relaxed text-neutral-400">
-        Four-corner mapping warps the final output to match a projector surface. Calibration is stored locally and reapplied on launch.
-      </div>
-      <div className="mt-3 rounded-lg border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-[10px]">
-        <div className="mb-2 flex items-center justify-between text-[9px] tracking-[0.18em] text-neutral-500">
-          <span>STAGE SOURCES</span>
-          <span className="text-cyan-300">{visibleSurfaces.length} VISIBLE</span>
+      <button
+        type="button"
+        data-help="output.line-up"
+        title="Drag the 4 corner dots until the picture fits your wall. Esc to finish."
+        aria-pressed={projection.calibrating}
+        onClick={wrap(() => {
+          if (projection.calibrating) {
+            setProjection('calibrating', false)
+            return
+          }
+          setProjection('enabled', true)
+          setProjection('calibrating', true)
+        })}
+        className={`w-full rounded-md border px-3 py-2.5 text-[10px] font-semibold tracking-[0.18em] transition-colors ${
+          projection.calibrating
+            ? 'border-cyan-300 bg-cyan-300 text-black'
+            : 'border-cyan-400/40 bg-cyan-950 text-cyan-300 hover:bg-cyan-900'
+        }`}
+      >
+        {projection.calibrating ? 'DONE LINING UP' : 'LINE UP PROJECTOR'}
+      </button>
+      <Hint>Drag the 4 corner dots until the picture fits your wall. Esc to finish.</Hint>
+
+      <div className="mt-4">
+        <p className={`mb-1.5 ${LABEL}`}>ALIGNMENT GRID</p>
+        <SegmentRow
+          options={PATTERN_MODES}
+          value={projection.patternMode}
+          onChange={wrap((value) => setProjection('patternMode', value))}
+          help="output.grid-mode"
+          title="Show a test grid to help you line up the projector. Press P to cycle."
+        />
+        <div className="mt-1.5">
+          <SegmentRow
+            options={PATTERN_TYPES}
+            value={projection.patternType}
+            onChange={wrap((value) => setProjection('patternType', value))}
+            help="output.grid-style"
+            title="Pick the grid style. Press Shift+P to change."
+          />
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center text-[9px] tracking-[0.16em]">
-          <div className="rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-2">
-            <div className="mb-1 text-[8px] text-neutral-500">LIVE</div>
-            <div className={hasVisibleLiveSurface ? 'text-cyan-300' : 'text-amber-300'}>{liveSurfaceCount}</div>
-          </div>
-          <div className="rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-2">
-            <div className="mb-1 text-[8px] text-neutral-500">INDEPENDENT</div>
-            <div className="text-neutral-200">{independentSurfaceCount}</div>
-          </div>
-          <div className="rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-2">
-            <div className="mb-1 text-[8px] text-neutral-500">MISSING</div>
-            <div className={invalidSurfaceCount > 0 ? 'text-amber-300' : 'text-neutral-200'}>{invalidSurfaceCount}</div>
-          </div>
-        </div>
-        {visibleSurfaces.length > 0 && renderableVisibleSurfaces.length === 0 && (
-          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-amber-100">
-            Visible surfaces exist, but none have a valid renderable source right now.
-          </div>
-        )}
-        {hasMixedStageState && (
-          <div className="mt-2 rounded-md border border-neutral-700 bg-neutral-950/80 px-2 py-2 text-neutral-200">
-            Stage is mixed: {liveSurfaceCount} live, {independentSurfaceCount} independent. Only <span className="font-semibold">LIVE OUTPUT</span> surfaces respond to generator changes.
-          </div>
-        )}
-        {!hasVisibleLiveSurface && visibleSurfaces.length > 0 && (
-          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-amber-100">
-            No visible surface is following <span className="font-semibold">LIVE OUTPUT</span>. Generator and effect changes will not appear on stage.
-          </div>
-        )}
-        {(invalidSurfaceCount > 0 || visibleSurfaces.length > 0) && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {visibleNonLiveSurfaceCount > 0 && (
-              <button
-                type="button"
-                onClick={wrap(() => setProjectionSurfacesLive(visibleSurfaces.map((surface) => surface.id)))}
-                className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-              >
-                MAKE ALL LIVE
-              </button>
-            )}
-            {invalidSurfaceCount > 0 && (
-              <button
-                type="button"
-                onClick={wrap(() => resetInvalidProjectionSurfaceSources(visibleSurfaces.map((surface) => surface.id)))}
-                className="rounded border border-amber-500/40 bg-amber-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-400/20"
-              >
-                RESET MISSING TO LIVE
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] tracking-[0.2em] text-neutral-500">
-        <div className="rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-2 text-center">
-          <div className="mb-1 text-[8px]">CORNER</div>
-          <div className="text-cyan-300">{['TL', 'TR', 'BR', 'BL'][projection.selectedCorner] ?? 'TL'}</div>
-        </div>
-        <div className="rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-2 text-center">
-          <div className="mb-1 text-[8px]">PATTERN</div>
-          <div className="text-cyan-300">{projection.patternMode.toUpperCase()}</div>
-        </div>
-        <div className="rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-2 text-center">
-          <div className="mb-1 text-[8px]">NUDGE</div>
-          <div className="text-cyan-300">{projection.nudgeStep}px</div>
-        </div>
+        <Hint>P cycles, Shift+P changes style.</Hint>
       </div>
 
-      <div className="mt-3">
-        <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">TEST PATTERN</p>
-        <div className="flex gap-1">
-          {PATTERN_MODES.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={wrap(() => setProjection('patternMode', value))}
-              aria-pressed={projection.patternMode === value}
-              className={`flex-1 rounded py-1 text-[8px] tracking-wider border transition-colors ${
-                projection.patternMode === value
-                  ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
-                  : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="mt-4">
+        <Toggle
+          label="BLACKOUT (B)"
+          help="output.blackout"
+          title="Instantly black out the projector. Press B."
+          value={projection.blackout}
+          onChange={wrap(() => setProjection('blackout', !projection.blackout))}
+        />
       </div>
 
-      <div className="mt-3">
-        <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">PATTERN TYPE</p>
-        <div className="flex gap-1">
-          {PATTERN_TYPES.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={wrap(() => setProjection('patternType', value))}
-              aria-pressed={projection.patternType === value}
-              className={`flex-1 rounded py-1 text-[8px] tracking-wider border transition-colors ${
-                projection.patternType === value
-                  ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
-                  : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <button
+        type="button"
+        data-help="output.reset-alignment"
+        title="Put the four corners back to the full picture."
+        onClick={wrap(() => resetProjection())}
+        className={`${BTN_NEUTRAL} w-full font-semibold tracking-[0.18em]`}
+      >
+        RESET ALIGNMENT
+      </button>
 
       {displays.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">OUTPUT DISPLAY</p>
+        <div className="mt-3" data-help="output.display" title="Which screen the output window opens on.">
+          <p className={`mb-1.5 ${LABEL}`}>OUTPUT DISPLAY</p>
           <select
             value={projection.displayId ?? ''}
             onChange={wrap(async (event) => {
@@ -393,7 +431,7 @@ export function SectionOutput({ onInteract }) {
                 await window.electronAPI.openProjectionWindow(nextDisplayId)
               }
             })}
-            className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.16em] text-neutral-200 outline-none focus:border-cyan-400"
+            className="w-full min-w-0 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.12em] text-neutral-200 outline-none focus:border-cyan-400"
           >
             {displays.map((display) => (
               <option key={display.id} value={display.id}>
@@ -404,593 +442,614 @@ export function SectionOutput({ onInteract }) {
         </div>
       )}
 
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={wrap(() => resetProjection())}
-          className="flex-1 rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-[9px] font-semibold tracking-[0.2em] text-neutral-300 transition-colors hover:border-neutral-500"
-        >
-          RESET WARP
-        </button>
-        <button
-          type="button"
-          onClick={wrap(() => {
-            setProjection('enabled', true)
-            setProjection('calibrating', true)
-          })}
-          className="flex-1 rounded-md border border-cyan-400/40 bg-cyan-950 px-3 py-2 text-[9px] font-semibold tracking-[0.2em] text-cyan-300 transition-colors hover:bg-cyan-900"
-        >
-          CALIBRATE
-        </button>
-      </div>
-
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={wrap(() => {
-            const name = window.prompt('Save projection profile as:', `Projection ${projection.profiles.length + 1}`)
-            if (!name) return
-            saveProjectionProfile(name.trim())
-          })}
-          disabled={!projection.points}
-          className="flex-1 rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-[9px] font-semibold tracking-[0.2em] text-neutral-300 transition-colors hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          SAVE PROFILE
-        </button>
-      </div>
-
       {window.electronAPI?.openProjectionWindow && (
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={wrap(async () => {
-              if (projection.outputWindowOpen) {
-                await window.electronAPI.closeProjectionWindow()
-                setProjection('outputWindowOpen', false)
-                return
-              }
+        <button
+          type="button"
+          data-help="output.window"
+          title="Open or close the full-screen output window on the projector display."
+          onClick={wrap(async () => {
+            if (projection.outputWindowOpen) {
+              await window.electronAPI.closeProjectionWindow()
+              setProjection('outputWindowOpen', false)
+              return
+            }
 
-              await window.electronAPI.openProjectionWindow(projection.displayId)
-              setProjection('outputWindowOpen', true)
-              setProjection('enabled', true)
-            })}
-            className={`flex-1 rounded-md border px-3 py-2 text-[9px] font-semibold tracking-[0.2em] transition-colors ${
-              projection.outputWindowOpen
-                ? 'border-red-900/50 bg-red-950/20 text-red-300 hover:border-red-500'
-                : 'border-cyan-400/40 bg-cyan-950 text-cyan-300 hover:bg-cyan-900'
-            }`}
-          >
-            {projection.outputWindowOpen ? 'CLOSE OUTPUT' : 'OPEN OUTPUT'}
-          </button>
-        </div>
+            await window.electronAPI.openProjectionWindow(projection.displayId)
+            setProjection('outputWindowOpen', true)
+            setProjection('enabled', true)
+          })}
+          className={`mt-3 w-full rounded-md border px-3 py-2 text-[9px] font-semibold tracking-[0.18em] transition-colors ${
+            projection.outputWindowOpen
+              ? 'border-red-900/50 bg-red-950/20 text-red-300 hover:border-red-500'
+              : 'border-cyan-400/40 bg-cyan-950 text-cyan-300 hover:bg-cyan-900'
+          }`}
+        >
+          {projection.outputWindowOpen ? 'CLOSE OUTPUT' : 'OPEN OUTPUT'}
+        </button>
       )}
 
-      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[9px] tracking-widest text-neutral-500">SURFACES</p>
-          <button
-            type="button"
-            onClick={wrap(() => addProjectionSurface())}
-            className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-          >
-            ADD
-          </button>
-        </div>
-        {projection.surfaces?.length > 0 ? (
-          <div className="space-y-2">
-            {projection.surfaces.map((surface) => (
-              <div
-                key={surface.id}
-                className={`rounded-md border px-2 py-2 ${projection.selectedSurfaceId === surface.id ? 'border-cyan-400/40 bg-cyan-950/30' : 'border-neutral-800 bg-neutral-950/70'}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={wrap(() => setProjection('selectedSurfaceId', surface.id))}
-                    className="min-w-0 text-left"
-                  >
-                    <div className="truncate text-[9px] font-semibold tracking-[0.18em] text-cyan-200">{surface.name.toUpperCase()}</div>
-                    <div className="text-[8px] tracking-[0.16em] text-neutral-500">
-                      {surfaceSourceMetaById.get(surface.id)?.label || 'LIVE OUTPUT'} / {(surface.blendMode || 'screen').toUpperCase()} / {Math.round((surface.opacity ?? 1) * 100)}%{surface.visible === false ? ' / HIDDEN' : ''}
-                    </div>
-                    <div className={`mt-1 text-[8px] tracking-[0.14em] ${
-                      surfaceSourceMetaById.get(surface.id)?.isValid === false
-                        ? 'text-amber-300'
-                        : surfaceSourceMetaById.get(surface.id)?.isLive
-                          ? 'text-cyan-300'
-                          : 'text-neutral-300'
-                    }`}>
-                      {surfaceSourceMetaById.get(surface.id)?.detail || 'Follows the main generator, geometry, color, and effect controls.'}
-                    </div>
-                  </button>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={wrap(() => duplicateProjectionSurface(surface.id))}
-                      className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                    >
-                      DUP
-                    </button>
-                    <button
-                      type="button"
-                      onClick={wrap(() => removeProjectionSurface(surface.id))}
-                      className="rounded border border-red-900/50 bg-red-950/20 px-2 py-1 text-[8px] tracking-[0.18em] text-red-300 transition-colors hover:border-red-500"
-                    >
-                      X
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div className="flex gap-2">
+      {/* ───────── ADVANCED: mapped shapes, saved looks, alignments ───────── */}
+      <button
+        type="button"
+        data-help="output.advanced"
+        title="Map the picture onto several shapes, and keep saved looks."
+        aria-expanded={advancedOpen}
+        onClick={() => setAdvancedOpen((open) => !open)}
+        className="mt-4 flex w-full items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-950/60 px-2.5 py-2 text-left transition-colors hover:border-neutral-600"
+      >
+        <span className="min-w-0 truncate text-[9px] font-semibold tracking-[0.18em] text-neutral-300">
+          <span aria-hidden="true" className="mr-1.5 text-neutral-500">{advancedOpen ? '▾' : '▸'}</span>
+          ADVANCED: MAPPED SHAPES
+        </span>
+        {(projection.surfaces?.length || 0) > 0 && (
+          <span className="shrink-0 text-[9px] text-cyan-300">{projection.surfaces.length}</span>
+        )}
+      </button>
+
+      {advancedOpen && (
+        <div className="mt-3 min-w-0 space-y-4">
+          {/* MAPPED SHAPES */}
+          <div className="min-w-0 rounded-xl border border-neutral-800 bg-neutral-950/60 p-2.5">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
+              <p className={LABEL}>MAPPED SHAPES</p>
               <button
                 type="button"
-                onClick={wrap(() => setProjection('editingSurfaces', !projection.editingSurfaces))}
-                className={`flex-1 rounded-md border px-3 py-2 text-[9px] font-semibold tracking-[0.2em] transition-colors ${
-                  projection.editingSurfaces
-                    ? 'border-cyan-400 bg-cyan-300 text-black'
-                    : 'border-cyan-400/40 bg-cyan-950 text-cyan-300 hover:bg-cyan-900'
-                }`}
+                data-help="output.new-shape"
+                title="Add another shape that you can place on a wall or object."
+                onClick={wrap(() => addProjectionSurface())}
+                className={BTN_PRIMARY}
               >
-                {projection.editingSurfaces ? 'DONE EDITING' : 'EDIT SURFACES'}
+                + NEW SHAPE
               </button>
             </div>
-            {projection.editingSurfaces && (
-              <div className="mt-2 flex gap-1">
-                {SURFACE_EDIT_MODES.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={wrap(() => setProjection('surfaceEditMode', value))}
-                    aria-pressed={projection.surfaceEditMode === value}
-                    className={`flex-1 rounded py-1 text-[8px] tracking-wider border transition-colors ${
-                      projection.surfaceEditMode === value
-                        ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
-                        : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-[10px] leading-relaxed text-neutral-500">
-            Add mapped surfaces to duplicate the live visual across multiple projectable areas.
-          </div>
-        )}
 
-        {selectedSurface && (
-          <div className="mt-3 space-y-3 border-t border-neutral-800 pt-3">
-            {!hasVisibleLiveSurface && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-[10px] leading-relaxed text-amber-200">
-                No visible surface is following <span className="font-semibold">LIVE OUTPUT</span>. Generator and effect changes will not appear on stage.
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'live', 'live'))}
-                    className="rounded border border-amber-500/40 bg-amber-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-amber-100 transition-colors hover:bg-amber-400/20"
-                  >
-                    SET SELECTED TO LIVE
-                  </button>
-                </div>
-              </div>
-            )}
-            <div>
-              <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">SURFACE SOURCE</p>
-              {selectedSurfaceSourceMeta && (
-                <div className={`mb-2 rounded-md border px-2 py-2 text-[9px] leading-relaxed ${
-                  selectedSurfaceSourceMeta.isValid
-                    ? selectedSurfaceSourceMeta.isLive
-                      ? 'border-cyan-400/30 bg-cyan-950/20 text-cyan-100'
-                      : 'border-neutral-800 bg-neutral-950/80 text-neutral-300'
-                    : 'border-amber-500/30 bg-amber-950/20 text-amber-100'
-                }`}>
-                  <div className="font-semibold tracking-[0.16em]">{selectedSurfaceSourceMeta.label}</div>
-                  <div className="mt-1">{selectedSurfaceSourceMeta.detail}</div>
-                </div>
-              )}
-              <select
-                value={`${selectedSurface.sourceMode || 'live'}:${selectedSurface.sourceId || 'live'}`}
-                onChange={wrap((event) => {
-                  const [sourceMode, sourceId] = event.target.value.split(':')
-                  assignProjectionSurfaceSource(selectedSurface.id, sourceMode, sourceId)
+            {projection.surfaces?.length > 0 ? (
+              <div className="space-y-2">
+                {visibleSurfaces.length > 0 && (
+                  <div data-help="output.shape-summary" className="space-y-1 text-[9px] leading-snug">
+                    {invalidSurfaceCount > 0 && (
+                      <div className="text-amber-200">
+                        {invalidSurfaceCount === 1 ? '1 shape’s source is missing' : `${invalidSurfaceCount} shapes’ sources are missing`}.
+                      </div>
+                    )}
+                    {hasMixedStageState && (
+                      <div className="text-neutral-300">
+                        Mixed: {plural(liveSurfaceCount, 'shape follows', 'shapes follow')} the main visual, {independentSurfaceCount} {independentSurfaceCount === 1 ? 'has its' : 'have their'} own look.
+                      </div>
+                    )}
+                    {!hasVisibleLiveSurface && renderableVisibleSurfaces.length > 0 && (
+                      <div className="text-amber-200">
+                        {plural(independentSurfaceCount, 'shape has its', 'shapes have their')} own look, so left-panel changes won’t show on stage.
+                      </div>
+                    )}
+                    {renderableVisibleSurfaces.length === 0 && (
+                      <div className="text-amber-200">No visible shape has a working source right now.</div>
+                    )}
+                    {(visibleNonLiveSurfaceCount > 0 || invalidSurfaceCount > 0) && (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {visibleNonLiveSurfaceCount > 0 && (
+                          <button
+                            type="button"
+                            data-help="output.all-main"
+                            title="Make every visible shape follow the main visual."
+                            onClick={wrap(() => setProjectionSurfacesLive(visibleSurfaces.map((surface) => surface.id)))}
+                            className={BTN_PRIMARY}
+                          >
+                            ALL FOLLOW MAIN VISUAL
+                          </button>
+                        )}
+                        {invalidSurfaceCount > 0 && (
+                          <button
+                            type="button"
+                            data-help="output.reset-missing"
+                            title="Send shapes with a missing source back to the main visual."
+                            onClick={wrap(() => resetInvalidProjectionSurfaceSources(visibleSurfaces.map((surface) => surface.id)))}
+                            className={BTN_WARN}
+                          >
+                            RESET MISSING TO MAIN
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {projection.surfaces.map((surface) => {
+                  const meta = surfaceSourceMetaById.get(surface.id)
+                  const isSelected = projection.selectedSurfaceId === surface.id
+                  return (
+                    <div
+                      key={surface.id}
+                      data-help="output.shape-row"
+                      className={`min-w-0 rounded-md border px-2 py-1.5 ${isSelected ? 'border-cyan-400/40 bg-cyan-950/30' : 'border-neutral-800 bg-neutral-950/70'}`}
+                    >
+                      <button
+                        type="button"
+                        title="Select this shape"
+                        onClick={wrap(() => setProjection('selectedSurfaceId', surface.id))}
+                        className="block w-full min-w-0 text-left"
+                      >
+                        <div className="truncate text-[9px] font-semibold tracking-[0.14em] text-cyan-200">{surface.name.toUpperCase()}</div>
+                        <div className={`truncate text-[8px] tracking-[0.1em] ${meta?.isValid === false ? 'text-amber-300' : meta?.isLive ? 'text-cyan-300/80' : 'text-neutral-400'}`}>
+                          {getFriendlySourceLabel(meta)} · {BLEND_LABELS[surface.blendMode || 'screen'] || 'LIGHTEN'} · {Math.round((surface.opacity ?? 1) * 100)}%{surface.visible === false ? ' · HIDDEN' : ''}
+                        </div>
+                      </button>
+                      {isSelected && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            data-help="output.shape-copy"
+                            title="Make a copy of this shape."
+                            onClick={wrap(() => duplicateProjectionSurface(surface.id))}
+                            className={BTN_NEUTRAL}
+                          >
+                            COPY
+                          </button>
+                          <ConfirmButton
+                            id={`surface:${surface.id}`}
+                            armed={armed}
+                            setArmed={setArmed}
+                            help="output.shape-delete"
+                            title="Delete this shape."
+                            label="DELETE"
+                            className={BTN_DANGER}
+                            onConfirm={wrap(() => removeProjectionSurface(surface.id))}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
                 })}
-                className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.16em] text-neutral-200 outline-none focus:border-cyan-400"
-              >
-                {sourceOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-              <p className="mt-1.5 text-[9px] leading-relaxed text-neutral-500">
-                {selectedSurfaceSourceMeta?.isLive
-                  ? '`LIVE OUTPUT` follows the main generator, geometry, color, and effect controls.'
-                  : 'This surface is independent from live controls until returned to `LIVE OUTPUT`. Media and preset choices here create reusable scenes, then assign that scene to the surface.'}
-              </p>
-              {selectedSurfaceSourceMeta && !selectedSurfaceSourceMeta.isLive && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'live', 'live'))}
-                    className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                  >
-                    FOLLOW LIVE OUTPUT
-                  </button>
-                  {selectedSurfaceAssignedScene && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={wrap(() => authorProjectionSurfaceScene(selectedSurface.id))}
-                        className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                      >
-                        {activeSceneId === selectedSurfaceAssignedScene.id
-                          ? 'AUTHORING SCENE'
-                          : selectedSurfaceSceneIsShared
-                            ? 'FORK + AUTHOR'
-                            : 'AUTHOR SCENE'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={wrap(() => loadSceneToLive(selectedSurfaceAssignedScene.id))}
-                        className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                      >
-                        LOAD SCENE TO LIVE
-                      </button>
-                    </>
-                  )}
-                  {!selectedSurfaceAssignedScene && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={wrap(() => authorProjectionSurfaceScene(selectedSurface.id))}
-                        className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                      >
-                        CREATE + AUTHOR SCENE
-                      </button>
-                      <button
-                        type="button"
-                        onClick={wrap(() => captureProjectionSurfaceAsScene(selectedSurface.id))}
-                        className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                      >
-                        CAPTURE TO SCENE
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              {selectedSurfaceAssignedScene && selectedSceneUsageCount > 1 && (
-                <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-[9px] leading-relaxed text-amber-100">
-                  This scene is shared by {selectedSceneUsageCount} surfaces. <span className="font-semibold">FORK + AUTHOR</span> will create a surface-specific scene before editing.
-                </div>
-              )}
-              {selectedSurface.visible === false && (
-                <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2 py-2 text-[9px] leading-relaxed text-amber-100">
-                  This surface is hidden and will not render on stage until shown again.
-                </div>
-              )}
-            </div>
-            <div>
-              <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">SURFACE STATE</p>
-              <div className="flex gap-2">
+
                 <button
                   type="button"
-                  onClick={wrap(() => {
-                    const nextName = window.prompt('Rename surface:', selectedSurface.name)
-                    if (!nextName?.trim()) return
-                    updateProjectionSurface(selectedSurface.id, { name: nextName.trim() })
-                  })}
-                  className="flex-1 rounded border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                >
-                  RENAME
-                </button>
-                <button
-                  type="button"
-                  onClick={wrap(() => updateProjectionSurface(selectedSurface.id, { visible: selectedSurface.visible === false }))}
-                  className={`flex-1 rounded border px-2 py-1.5 text-[8px] tracking-[0.18em] transition-colors ${
-                    selectedSurface.visible === false
-                      ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
-                      : 'border-amber-500/40 bg-amber-400/10 text-amber-100 hover:bg-amber-400/20'
+                  data-help="output.shape-edit"
+                  title="Drag shape corners right on the picture. Esc when done."
+                  onClick={wrap(() => setProjection('editingSurfaces', !projection.editingSurfaces))}
+                  className={`w-full rounded-md border px-3 py-2 text-[9px] font-semibold tracking-[0.18em] transition-colors ${
+                    projection.editingSurfaces
+                      ? 'border-cyan-400 bg-cyan-300 text-black'
+                      : 'border-cyan-400/40 bg-cyan-950 text-cyan-300 hover:bg-cyan-900'
                   }`}
                 >
-                  {selectedSurface.visible === false ? 'SHOW SURFACE' : 'HIDE SURFACE'}
+                  {projection.editingSurfaces ? 'DONE ON CANVAS' : 'EDIT ON CANVAS'}
                 </button>
+                {projection.editingSurfaces && (
+                  <SegmentRow
+                    options={SURFACE_EDIT_MODES}
+                    value={projection.surfaceEditMode}
+                    onChange={wrap((value) => setProjection('surfaceEditMode', value))}
+                    help="output.shape-edit-mode"
+                    title="Move corners to place the shape, or cut the shape’s outline."
+                  />
+                )}
               </div>
-            </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between text-[9px] tracking-[0.18em] text-neutral-500">
-                <span>OPACITY</span>
-                <span className="text-cyan-300">{Math.round((selectedSurface.opacity ?? 1) * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0.1"
-                max="1"
-                step="0.05"
-                value={selectedSurface.opacity ?? 1}
-                onChange={wrap((event) => updateProjectionSurface(selectedSurface.id, { opacity: Number(event.target.value) }))}
-                className="w-full accent-cyan-300"
-              />
-            </div>
-            <div>
-              <p className="mb-1.5 text-[9px] tracking-widest text-neutral-500">BLEND MODE</p>
-              <div className="flex gap-1">
-                {SURFACE_BLEND_MODES.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={wrap(() => updateProjectionSurface(selectedSurface.id, { blendMode: value }))}
-                    aria-pressed={selectedSurface.blendMode === value}
-                    className={`flex-1 rounded py-1 text-[8px] tracking-wider border transition-colors ${
-                      selectedSurface.blendMode === value
-                        ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
-                        : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between text-[9px] tracking-[0.18em] text-neutral-500">
-                <span>MASK POINTS</span>
-                <span className="text-amber-300">{selectedSurface.maskPoints?.length || 0}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={wrap(() => addProjectionSurfaceMaskPoint(selectedSurface.id, projection.selectedMaskPoint || 0))}
-                  className="flex-1 rounded border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                >
-                  ADD POINT
-                </button>
-                <button
-                  type="button"
-                  onClick={wrap(() => removeProjectionSurfaceMaskPoint(selectedSurface.id, projection.selectedMaskPoint || 0))}
-                  disabled={(selectedSurface.maskPoints?.length || 0) <= 3}
-                  className="flex-1 rounded border border-red-900/50 bg-red-950/20 px-2 py-1.5 text-[8px] tracking-[0.18em] text-red-300 transition-colors hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  DELETE
-                </button>
-                <button
-                  type="button"
-                  onClick={wrap(() => resetProjectionSurfaceMask(selectedSurface.id))}
-                  className="flex-1 rounded border border-amber-900/50 bg-amber-950/20 px-2 py-1.5 text-[8px] tracking-[0.18em] text-amber-300 transition-colors hover:border-amber-500"
-                >
-                  RESET
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+            ) : (
+              <Hint>Add a shape to put the picture on a wall, screen or object.</Hint>
+            )}
 
-      {projection.profiles.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="text-[9px] tracking-widest text-neutral-500">PROJECTION PROFILES</p>
-          {projection.profiles.map((profile) => (
-            <div key={profile.id} className="rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-[9px] font-semibold tracking-[0.18em] text-cyan-200">{profile.name.toUpperCase()}</div>
-                  <div className="text-[8px] tracking-[0.16em] text-neutral-500">{(profile.patternMode || 'off').toUpperCase()} / {(profile.patternType || 'grid').toUpperCase()}</div>
+            {selectedSurface && (
+              <div className="mt-3 min-w-0 space-y-3 border-t border-neutral-800 pt-3">
+                <div data-help="output.shape-source" title="What this shape shows.">
+                  <p className={`mb-1.5 ${LABEL}`}>SHOWS</p>
+                  <select
+                    value={`${selectedSurface.sourceMode || 'live'}:${selectedSurface.sourceId || 'live'}`}
+                    onChange={wrap((event) => {
+                      const [sourceMode, sourceId] = event.target.value.split(':')
+                      assignProjectionSurfaceSource(selectedSurface.id, sourceMode, sourceId)
+                    })}
+                    className="w-full min-w-0 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.08em] text-neutral-200 outline-none focus:border-cyan-400"
+                  >
+                    {sourceOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <Hint tone={selectedSurfaceSourceMeta && !selectedSurfaceSourceMeta.isValid ? 'warn' : 'muted'}>
+                    {sourceHint}
+                  </Hint>
+                  {selectedSurfaceSourceMeta && !selectedSurfaceSourceMeta.isLive && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        title="Make this shape follow the main visual again."
+                        onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'live', 'live'))}
+                        className={BTN_PRIMARY}
+                      >
+                        FOLLOW MAIN VISUAL
+                      </button>
+                      {selectedSurfaceAssignedScene && (
+                        <>
+                          <button
+                            type="button"
+                            data-help="output.look-edit"
+                            title="Edit this look with the left-panel controls. Other shapes aren’t affected."
+                            onClick={wrap(() => authorProjectionSurfaceScene(selectedSurface.id))}
+                            className={BTN_PRIMARY}
+                          >
+                            {activeSceneId === selectedSurfaceAssignedScene.id
+                              ? 'EDITING THIS LOOK'
+                              : selectedSurfaceSceneIsShared
+                                ? 'COPY & EDIT'
+                                : 'EDIT THIS LOOK'}
+                          </button>
+                          <button
+                            type="button"
+                            data-help="output.look-show"
+                            title="Load this look into the main visual."
+                            onClick={wrap(() => loadSceneToLive(selectedSurfaceAssignedScene.id))}
+                            className={BTN_NEUTRAL}
+                          >
+                            SHOW ON MAIN
+                          </button>
+                        </>
+                      )}
+                      {!selectedSurfaceAssignedScene && (
+                        <>
+                          <button
+                            type="button"
+                            data-help="output.look-new-edit"
+                            title="Turn this into a saved look and start editing it."
+                            onClick={wrap(() => authorProjectionSurfaceScene(selectedSurface.id))}
+                            className={BTN_PRIMARY}
+                          >
+                            NEW LOOK &amp; EDIT
+                          </button>
+                          <button
+                            type="button"
+                            data-help="output.look-save-shape"
+                            title="Save what this shape shows as a look."
+                            onClick={wrap(() => captureProjectionSurfaceAsScene(selectedSurface.id))}
+                            className={BTN_NEUTRAL}
+                          >
+                            SAVE AS LOOK
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {selectedSurfaceAssignedScene && selectedSceneUsageCount > 1 && (
+                    <Hint tone="warn">
+                      Used by {selectedSceneUsageCount} shapes. COPY &amp; EDIT makes a private copy first.
+                    </Hint>
+                  )}
+                  {selectedSurface.visible === false && (
+                    <Hint tone="warn">This shape is hidden, so it won’t show on stage.</Hint>
+                  )}
                 </div>
-                <div className="flex gap-1">
+
+                <div className="flex gap-1.5">
                   <button
                     type="button"
+                    data-help="output.shape-rename"
+                    title="Rename this shape."
+                    onClick={wrap(() => {
+                      const nextName = window.prompt('Rename shape:', selectedSurface.name)
+                      if (!nextName?.trim()) return
+                      updateProjectionSurface(selectedSurface.id, { name: nextName.trim() })
+                    })}
+                    className={`${BTN_NEUTRAL} min-w-0 flex-1 truncate`}
+                  >
+                    RENAME
+                  </button>
+                  <button
+                    type="button"
+                    data-help="output.shape-visibility"
+                    title="Hide or show this shape on stage."
+                    onClick={wrap(() => updateProjectionSurface(selectedSurface.id, { visible: selectedSurface.visible === false }))}
+                    className={`${selectedSurface.visible === false ? BTN_PRIMARY : BTN_WARN} min-w-0 flex-1 truncate`}
+                  >
+                    {selectedSurface.visible === false ? 'SHOW SHAPE' : 'HIDE SHAPE'}
+                  </button>
+                </div>
+
+                <div data-help="output.shape-opacity" title="How see-through this shape is.">
+                  <div className="mb-1 flex items-center justify-between text-[9px] tracking-[0.18em] text-neutral-500">
+                    <span>OPACITY</span>
+                    <span className="text-cyan-300">{Math.round((selectedSurface.opacity ?? 1) * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.05"
+                    value={selectedSurface.opacity ?? 1}
+                    aria-label="Shape opacity"
+                    onChange={wrap((event) => updateProjectionSurface(selectedSurface.id, { opacity: Number(event.target.value) }))}
+                    className="w-full accent-cyan-300"
+                  />
+                </div>
+
+                <div>
+                  <p className={`mb-1.5 ${LABEL}`}>BLEND</p>
+                  <SegmentRow
+                    options={SURFACE_BLEND_MODES}
+                    value={selectedSurface.blendMode}
+                    onChange={wrap((value) => updateProjectionSurface(selectedSurface.id, { blendMode: value }))}
+                    help="output.shape-blend"
+                    title="How this shape mixes with the shapes beneath it: lighten, solid, glow or darken."
+                  />
+                </div>
+
+                {projection.editingSurfaces && projection.surfaceEditMode === 'mask' && (
+                  <div data-help="output.cut-points" title="Points that outline the shape. Drag them on the canvas.">
+                    <div className="mb-1 flex items-center justify-between text-[9px] tracking-[0.18em] text-neutral-500">
+                      <span>CUT POINTS</span>
+                      <span className="text-amber-300">{selectedSurface.maskPoints?.length || 0}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={wrap(() => addProjectionSurfaceMaskPoint(selectedSurface.id, projection.selectedMaskPoint || 0))}
+                        className={BTN_NEUTRAL}
+                      >
+                        + POINT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={wrap(() => removeProjectionSurfaceMaskPoint(selectedSurface.id, projection.selectedMaskPoint || 0))}
+                        disabled={(selectedSurface.maskPoints?.length || 0) <= 3}
+                        className={`${BTN_DANGER} disabled:cursor-not-allowed disabled:opacity-40`}
+                      >
+                        − POINT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={wrap(() => resetProjectionSurfaceMask(selectedSurface.id))}
+                        className={`${BTN} border-amber-900/50 bg-amber-950/20 text-amber-300 hover:border-amber-500`}
+                      >
+                        RESET CUT
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* SAVED LOOKS */}
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <p className={LABEL}>SAVED LOOKS</p>
+              <button
+                type="button"
+                data-help="output.save-look"
+                title="Save the generator, color and effects you have now as a reusable look."
+                onClick={wrap(() => {
+                  const name = window.prompt('Save look as:', `Look ${(scenes?.length || 0) + 1}`)
+                  if (!name?.trim()) return
+                  saveScene(name.trim(), { assignSelectedSurface: Boolean(selectedSurface) })
+                })}
+                className={BTN_PRIMARY}
+              >
+                SAVE CURRENT LOOK
+              </button>
+            </div>
+            {(scenes || []).length > 0 ? (
+              scenes.map((scene) => {
+                const isEditing = activeSceneId === scene.id
+                const usage = sceneUsageCountById.get(scene.id) || 0
+                const menuId = `scene:${scene.id}`
+                return (
+                  <div
+                    key={scene.id}
+                    data-help="output.look-row"
+                    className={`min-w-0 rounded-md border px-2 py-1.5 ${isEditing ? 'border-cyan-400/50 bg-cyan-950/30' : 'border-neutral-800 bg-neutral-950/70'}`}
+                  >
+                    <div className="flex min-w-0 items-center justify-between gap-1.5">
+                      <div className="min-w-0 truncate text-[9px] font-semibold tracking-[0.14em] text-cyan-200">{scene.name.toUpperCase()}</div>
+                      <MoreToggle help="output.look-more" open={openMenu === menuId} onToggle={() => toggleMenu(menuId)} />
+                    </div>
+                    <div className="truncate text-[8px] tracking-[0.1em] text-neutral-400">
+                      {getSceneContentLabel(scene, activeSceneId, activeSceneDraftState)}
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1 text-[8px] tracking-[0.1em] text-neutral-600">
+                      <span className="min-w-0 truncate">ORIGIN · {getSceneOriginLabel(scene)}</span>
+                      {usage > 0 && <span className="shrink-0">· {plural(usage, 'SHAPE', 'SHAPES')}</span>}
+                    </div>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button
+                        type="button"
+                        data-help="output.look-show"
+                        title="Load this look into the main visual."
+                        onClick={wrap(() => loadSceneToLive(scene.id))}
+                        className={`${BTN_PRIMARY} min-w-0 flex-1 whitespace-nowrap !px-1 !tracking-[0.06em]`}
+                      >
+                        SHOW ON MAIN
+                      </button>
+                      <button
+                        type="button"
+                        data-help="output.look-edit"
+                        title="Edit this look with the left-panel controls. Changes autosave to the look."
+                        onClick={wrap(() => startSceneEdit(scene.id))}
+                        className={`${BTN} min-w-0 flex-1 whitespace-nowrap !px-1 !tracking-[0.06em] ${
+                          isEditing
+                            ? 'border-cyan-400 bg-cyan-300 text-black'
+                            : 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
+                        }`}
+                      >
+                        {isEditing ? 'EDITING' : 'EDIT THIS LOOK'}
+                      </button>
+                    </div>
+                    {openMenu === menuId && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-neutral-800 pt-1.5">
+                        <button
+                          type="button"
+                          title="Rename this look."
+                          onClick={wrap(() => {
+                            const nextName = window.prompt('Rename look:', scene.name)
+                            if (!nextName?.trim()) return
+                            updateScene(scene.id, { name: nextName.trim() })
+                          })}
+                          className={BTN_NEUTRAL}
+                        >
+                          RENAME
+                        </button>
+                        {selectedSurface && (
+                          <>
+                            <button
+                              type="button"
+                              title="Use this look on the selected shape."
+                              onClick={wrap(() => assignSceneToSurface(scene.id, selectedSurface.id))}
+                              className={BTN_NEUTRAL}
+                            >
+                              USE ON SHAPE
+                            </button>
+                            <button
+                              type="button"
+                              title="Copy this look and use the copy on the selected shape."
+                              onClick={wrap(() => duplicateScene(scene.id, {
+                                surfaceId: selectedSurface.id,
+                                assignSurface: true,
+                                name: `${scene.name} ${selectedSurface.name}`,
+                              }))}
+                              className={BTN_NEUTRAL}
+                            >
+                              COPY
+                            </button>
+                          </>
+                        )}
+                        <ConfirmButton
+                          id={`overwrite:${scene.id}`}
+                          armed={armed}
+                          setArmed={setArmed}
+                          title="Replace this look with what the main visual shows now."
+                          label="OVERWRITE WITH CURRENT"
+                          className={BTN_PRIMARY}
+                          onConfirm={wrap(() => captureSceneState(scene.id))}
+                        />
+                        <ConfirmButton
+                          id={`delete-look:${scene.id}`}
+                          armed={armed}
+                          setArmed={setArmed}
+                          title="Delete this look."
+                          label="DELETE"
+                          className={BTN_DANGER}
+                          onConfirm={wrap(() => deleteScene(scene.id))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            ) : (
+              <Hint>Save the current look to reuse it later or put it on a shape.</Hint>
+            )}
+          </div>
+
+          {/* SAVED ALIGNMENTS (profiles) */}
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <p className={LABEL}>SAVED ALIGNMENTS</p>
+              <button
+                type="button"
+                data-help="output.save-alignment"
+                title={projection.points ? 'Save the current projector alignment.' : 'Move a corner first'}
+                onClick={wrap(() => {
+                  const name = window.prompt('Save alignment as:', `Alignment ${projection.profiles.length + 1}`)
+                  if (!name) return
+                  saveProjectionProfile(name.trim())
+                })}
+                disabled={!projection.points}
+                className={`${BTN_PRIMARY} disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                SAVE ALIGNMENT
+              </button>
+            </div>
+            {!projection.points && <Hint>Move a corner first.</Hint>}
+            {projection.profiles.map((profile) => (
+              <div key={profile.id} data-help="output.alignment-row" className="min-w-0 rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-1.5">
+                <div className="truncate text-[9px] font-semibold tracking-[0.14em] text-cyan-200">{profile.name.toUpperCase()}</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    data-help="output.alignment-load"
+                    title="Apply this saved alignment."
                     onClick={wrap(() => applyProjectionProfile(profile.id))}
-                    className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
+                    className={BTN_PRIMARY}
                   >
                     LOAD
                   </button>
-                  <button
-                    type="button"
-                    onClick={wrap(() => deleteProjectionProfile(profile.id))}
-                    className="rounded border border-red-900/50 bg-red-950/20 px-2 py-1 text-[8px] tracking-[0.18em] text-red-300 transition-colors hover:border-red-500"
-                  >
-                    X
-                  </button>
+                  <ConfirmButton
+                    id={`profile:${profile.id}`}
+                    armed={armed}
+                    setArmed={setArmed}
+                    title="Delete this saved alignment."
+                    label="DELETE"
+                    className={BTN_DANGER}
+                    onConfirm={wrap(() => deleteProjectionProfile(profile.id))}
+                  />
                 </div>
               </div>
+            ))}
+          </div>
+
+          {/* MEDIA LIBRARY */}
+          {(mediaLibrary || []).length > 0 && (
+            <div className="min-w-0 space-y-2">
+              <p className={LABEL}>MEDIA LIBRARY</p>
+              {mediaLibrary.map((asset) => {
+                const menuId = `media:${asset.id}`
+                return (
+                  <div key={asset.id} data-help="output.media-row" className="min-w-0 rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-1.5">
+                    <div className="flex min-w-0 items-center justify-between gap-1.5">
+                      <div className="min-w-0 truncate text-[9px] font-semibold tracking-[0.14em] text-cyan-200">{asset.name.toUpperCase()}</div>
+                      <MoreToggle help="output.media-more" open={openMenu === menuId} onToggle={() => toggleMenu(menuId)} />
+                    </div>
+                    <div className="truncate text-[8px] tracking-[0.1em] text-neutral-500">{asset.type.toUpperCase()}</div>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button
+                        type="button"
+                        data-help="output.media-main"
+                        title="Show this media on the main visual."
+                        onClick={wrap(() => setActiveMediaAsset(asset.id))}
+                        className={`${BTN_PRIMARY} min-w-0 flex-1 whitespace-nowrap !px-1 !tracking-[0.06em]`}
+                      >
+                        SHOW ON MAIN
+                      </button>
+                      {selectedSurface && (
+                        <button
+                          type="button"
+                          data-help="output.media-assign"
+                          title="Put this media on the selected shape."
+                          onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'media', asset.id))}
+                          className={`${BTN_NEUTRAL} min-w-0 flex-1 whitespace-nowrap !px-1 !tracking-[0.06em]`}
+                        >
+                          USE ON SHAPE
+                        </button>
+                      )}
+                    </div>
+                    {openMenu === menuId && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-neutral-800 pt-1.5">
+                        <button
+                          type="button"
+                          title="Rename this media."
+                          onClick={wrap(() => {
+                            const nextName = window.prompt('Rename media:', asset.name)
+                            if (!nextName?.trim()) return
+                            renameMediaAsset(asset.id, nextName.trim())
+                          })}
+                          className={BTN_NEUTRAL}
+                        >
+                          RENAME
+                        </button>
+                        <ConfirmButton
+                          id={`delete-media:${asset.id}`}
+                          armed={armed}
+                          setArmed={setArmed}
+                          title="Remove this media from the library."
+                          label="DELETE"
+                          className={BTN_DANGER}
+                          onConfirm={wrap(() => removeMediaAsset(asset.id))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
-          ))}
+          )}
         </div>
       )}
-
-      {(mediaLibrary || []).length > 0 && (
-        <div className="mt-4 space-y-2">
-          <p className="text-[9px] tracking-widest text-neutral-500">MEDIA LIBRARY</p>
-          {mediaLibrary.map((asset) => (
-            <div key={asset.id} className="rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-[9px] font-semibold tracking-[0.18em] text-cyan-200">{asset.name.toUpperCase()}</div>
-                  <div className="text-[8px] tracking-[0.16em] text-neutral-500">{asset.type.toUpperCase()}</div>
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={wrap(() => setActiveMediaAsset(asset.id))}
-                    className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                  >
-                    LIVE
-                  </button>
-                  {selectedSurface && (
-                    <button
-                    type="button"
-                    onClick={wrap(() => assignProjectionSurfaceSource(selectedSurface.id, 'media', asset.id))}
-                    className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                  >
-                    ASSIGN
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={wrap(() => {
-                      const nextName = window.prompt('Rename media asset:', asset.name)
-                      if (!nextName?.trim()) return
-                      renameMediaAsset(asset.id, nextName.trim())
-                    })}
-                    className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                  >
-                    NAME
-                  </button>
-                  <button
-                    type="button"
-                    onClick={wrap(() => removeMediaAsset(asset.id))}
-                    className="rounded border border-red-900/50 bg-red-950/20 px-2 py-1 text-[8px] tracking-[0.18em] text-red-300 transition-colors hover:border-red-500"
-                  >
-                    X
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-[9px] tracking-widest text-neutral-500">SCENE LIBRARY</p>
-          <button
-            type="button"
-            onClick={wrap(() => {
-              const name = window.prompt('Save scene as:', `Scene ${(scenes?.length || 0) + 1}`)
-              if (!name?.trim()) return
-              saveScene(name.trim(), { assignSelectedSurface: Boolean(selectedSurface) })
-            })}
-            className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-          >
-            CAPTURE LIVE
-          </button>
-        </div>
-        {activeEditedScene && (
-          <div className="rounded-md border border-cyan-400/30 bg-cyan-950/20 px-3 py-2 text-[9px] leading-relaxed text-cyan-100">
-            <div className="font-semibold tracking-[0.16em]">EDITING SCENE · {activeEditedScene.name.toUpperCase()}</div>
-            <div className="mt-1 text-cyan-50/80">
-              {activeSceneEditorMode === 'surface' && activeSceneEditorSourceSurfaceName
-                ? `Authoring for ${activeSceneEditorSourceSurfaceName.toUpperCase()}. Control changes are editing this scene draft without overwriting the shared live state.`
-                : 'Authoring from the scene library. Control changes are editing this scene draft without overwriting the shared live state.'}
-            </div>
-            <div className="mt-1 text-cyan-50/80">
-              {activeSceneEditorHasLocalEdits
-                ? 'Autosave is active for this scene draft. Restore Live exits authoring and returns to the previous live composition, while Keep Live applies the draft to live output.'
-                : 'Autosave is armed for this scene draft. Restore Live exits authoring and returns to the previous live composition, while Keep Live applies the draft to live output.'}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={wrap(() => stopSceneEdit({ restoreLive: true }))}
-                className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-              >
-                RESTORE LIVE
-              </button>
-              <button
-                type="button"
-                onClick={wrap(() => stopSceneEdit({ restoreLive: false }))}
-                className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-              >
-                KEEP LIVE
-              </button>
-            </div>
-          </div>
-        )}
-        {(scenes || []).length > 0 ? (
-          scenes.map((scene) => (
-            <div key={scene.id} className="rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-[9px] font-semibold tracking-[0.18em] text-cyan-200">{scene.name.toUpperCase()}</div>
-                  <div className="text-[8px] tracking-[0.16em] text-neutral-500">
-                    {getSceneContentLabel(scene, activeSceneId, activeSceneDraftState)}
-                  </div>
-                  <div className="mt-1 text-[8px] tracking-[0.14em] text-neutral-600">
-                    ORIGIN · {getSceneOriginLabel(scene)}
-                  </div>
-                  <div className="mt-1 text-[8px] tracking-[0.14em] text-neutral-600">
-                    Load to live for a temporary preview, or author from a surface to sync edits directly into this scene.
-                  </div>
-                  <div className="mt-1 text-[8px] tracking-[0.14em] text-neutral-600">
-                    USED BY {sceneUsageCountById.get(scene.id) || 0} SURFACE{(sceneUsageCountById.get(scene.id) || 0) === 1 ? '' : 'S'}
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={wrap(() => loadSceneToLive(scene.id))}
-                    className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                  >
-                    LOAD LIVE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={wrap(() => startSceneEdit(scene.id))}
-                    className={`rounded border px-2 py-1 text-[8px] tracking-[0.18em] transition-colors ${
-                      activeSceneId === scene.id
-                        ? 'border-cyan-400 bg-cyan-300 text-black'
-                        : 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
-                    }`}
-                  >
-                    {activeSceneId === scene.id ? 'AUTHORING' : 'AUTHOR'}
-                  </button>
-                  {selectedSurface && (
-                    <button
-                      type="button"
-                      onClick={wrap(() => duplicateScene(scene.id, {
-                        surfaceId: selectedSurface.id,
-                        assignSurface: true,
-                        name: `${scene.name} ${selectedSurface.name}`,
-                      }))}
-                      className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                    >
-                      FORK
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={wrap(() => {
-                      const nextName = window.prompt('Rename scene:', scene.name)
-                      if (!nextName?.trim()) return
-                      updateScene(scene.id, { name: nextName.trim() })
-                    })}
-                    className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                  >
-                    NAME
-                  </button>
-                  <button
-                    type="button"
-                    onClick={wrap(() => captureSceneState(scene.id))}
-                    className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[8px] tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-                  >
-                    REPLACE FROM LIVE
-                  </button>
-                  {selectedSurface && (
-                    <button
-                      type="button"
-                      onClick={wrap(() => assignSceneToSurface(scene.id, selectedSurface.id))}
-                      className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-[8px] tracking-[0.18em] text-neutral-300 transition-colors hover:border-neutral-500"
-                    >
-                      ASSIGN
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={wrap(() => deleteScene(scene.id))}
-                    className="rounded border border-red-900/50 bg-red-950/20 px-2 py-1 text-[8px] tracking-[0.18em] text-red-300 transition-colors hover:border-red-500"
-                  >
-                    X
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-md border border-neutral-800 bg-neutral-950/70 px-2 py-2 text-[10px] leading-relaxed text-neutral-500">
-            Capture the current live generator/media state into reusable scenes and assign them to mapped surfaces.
-          </div>
-        )}
-      </div>
     </div>
   )
 }

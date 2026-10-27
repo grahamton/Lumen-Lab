@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { applyProjectiveMatrix, clamp01, computeProjectiveMatrix } from '../utils/projectionMapping'
+import { OverlayDock, OverlayHandle } from './ProjectionCalibrationOverlay'
 
 const HANDLE_LABELS = ['TL', 'TR', 'BR', 'BL']
+const SIDEBAR_WIDTH = 256 // w-64 controls sidebar, drawn above this overlay
 
 function normalizePoint(x, y, rect) {
   return {
@@ -14,6 +16,7 @@ function normalizePoint(x, y, rect) {
 
 export function ProjectionSurfaceEditorOverlay({ rect, viewportWidth, viewportHeight }) {
   const [dragState, setDragState] = useState(null)
+  const insetLeft = useStore((state) => (state.ui?.controlsOpen ? SIDEBAR_WIDTH : 0))
   const {
     surfaces,
     selectedSurfaceId,
@@ -121,11 +124,27 @@ export function ProjectionSurfaceEditorOverlay({ rect, viewportWidth, viewportHe
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
     }
   }, [dragState, rect, screenToLocalMatrix, selectedSurface, setProjectionSurfaceMaskPoints, setProjectionSurfacePoints])
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      const tagName = event.target?.tagName
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tagName)) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setProjection('editingSurfaces', false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setProjection])
 
   if (!selectedSurface) return null
 
@@ -146,41 +165,56 @@ export function ProjectionSurfaceEditorOverlay({ rect, viewportWidth, viewportHe
         ))}
       </svg>
 
-      <div className="absolute top-4 right-4 pointer-events-auto max-w-xs rounded-xl border border-cyan-400/30 bg-black/75 px-4 py-3 text-[11px] text-cyan-50 backdrop-blur">
-        <div className="mb-1 text-[10px] font-semibold tracking-[0.25em] text-cyan-300">SURFACE EDITOR</div>
-        <div className="text-cyan-100/75">
+      <OverlayDock insetLeft={insetLeft} viewportWidth={viewportWidth}>
+        <div className="text-center text-[11px] text-cyan-100/80">
           {surfaceEditMode === 'warp'
-            ? 'Drag corners to place each mapped surface. Surfaces render the current visual source independently.'
-            : 'Drag mask points to cut non-rectangular silhouettes inside the selected surface.'}
+            ? 'Drag corners to place the shape · Esc done'
+            : 'Drag points to cut the shape · Esc done'}
         </div>
-        <button
-          type="button"
-          onClick={() => setProjection('editingSurfaces', false)}
-          className="mt-3 rounded-md border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
-        >
-          DONE
-        </button>
-      </div>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+          {[['warp', 'MOVE CORNERS'], ['mask', 'CUT SHAPE']].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={surfaceEditMode === value}
+              onClick={() => setProjection('surfaceEditMode', value)}
+              className={`h-6 rounded-md border px-2 text-[10px] font-semibold tracking-[0.1em] transition-colors ${
+                surfaceEditMode === value
+                  ? 'border-cyan-300 bg-cyan-300 text-black'
+                  : 'border-cyan-400/30 bg-cyan-400/5 text-cyan-200 hover:bg-cyan-400/15'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setProjection('editingSurfaces', false)}
+            className="h-6 rounded-md border border-cyan-400/40 bg-cyan-400/10 px-3 text-[10px] font-semibold tracking-[0.18em] text-cyan-200 transition-colors hover:bg-cyan-400/20"
+          >
+            DONE
+          </button>
+        </div>
+      </OverlayDock>
 
       {selectedSurface.points.map((point, index) => (
-        <button
+        <OverlayHandle
           key={`${selectedSurface.id}-${HANDLE_LABELS[index]}`}
-          type="button"
+          x={rect.left + point.x * rect.width}
+          y={rect.top + point.y * rect.height}
+          label={HANDLE_LABELS[index]}
+          title={`${selectedSurface.name} corner ${HANDLE_LABELS[index]}`}
+          selected={surfaceEditMode === 'warp'}
+          active={dragState?.type === 'warp' && dragState.handleIndex === index}
+          insetLeft={insetLeft}
+          viewportWidth={viewportWidth}
+          viewportHeight={viewportHeight}
           onPointerDown={(event) => {
             event.preventDefault()
             setProjection('selectedSurfaceId', selectedSurface.id)
             setDragState({ type: 'warp', handleIndex: index })
           }}
-          className={`absolute pointer-events-auto flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[10px] font-semibold tracking-wider text-black shadow-[0_0_20px_rgba(34,211,238,0.35)] ${
-            surfaceEditMode === 'warp' ? 'border-cyan-200 bg-cyan-300' : 'border-cyan-300/40 bg-cyan-300/40'
-          }`}
-          style={{
-            left: `${rect.left + point.x * rect.width}px`,
-            top: `${rect.top + point.y * rect.height}px`,
-          }}
-        >
-          {HANDLE_LABELS[index]}
-        </button>
+        />
       ))}
       {surfaceEditMode === 'mask' && (
         <>
@@ -194,24 +228,26 @@ export function ProjectionSurfaceEditorOverlay({ rect, viewportWidth, viewportHe
             />
           </svg>
           {maskScreenPoints.map((point, index) => (
-            <button
+            <OverlayHandle
               key={`${selectedSurface.id}-mask-${index}`}
-              type="button"
+              x={point.x}
+              y={point.y}
+              label={String(index + 1)}
+              title={`Cut point ${index + 1}`}
+              tone="amber"
+              size={26}
+              selected={selectedMaskPoint === index}
+              active={dragState?.type === 'mask' && dragState.handleIndex === index}
+              insetLeft={insetLeft}
+              viewportWidth={viewportWidth}
+              viewportHeight={viewportHeight}
               onPointerDown={(event) => {
                 event.preventDefault()
                 setProjection('selectedSurfaceId', selectedSurface.id)
                 setProjection('selectedMaskPoint', index)
                 setDragState({ type: 'mask', handleIndex: index })
               }}
-              className={`absolute pointer-events-auto flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[9px] font-semibold tracking-wider text-black ${
-                selectedMaskPoint === index
-                  ? 'border-amber-100 bg-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.35)]'
-                  : 'border-amber-200 bg-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.22)]'
-              }`}
-              style={{ left: `${point.x}px`, top: `${point.y}px` }}
-            >
-              {index + 1}
-            </button>
+            />
           ))}
         </>
       )}
