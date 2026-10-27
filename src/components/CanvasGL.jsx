@@ -385,6 +385,9 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
       return () => {
         disposed = true
         video.pause()
+        // Dropping the source releases the decoder; pause() alone keeps it alive.
+        video.removeAttribute('src')
+        video.load()
       }
     }
 

@@ -33,6 +33,8 @@ export class ErrorBoundary extends React.Component {
             </button>
             <button
               onClick={() => {
+                const confirmed = window.confirm('Hard Reset erases all saved presets, scenes, snapshots and MIDI mappings. Continue?')
+                if (!confirmed) return
                 localStorage.clear()
                 window.location.reload()
               }}

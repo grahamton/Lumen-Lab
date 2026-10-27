@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { act } from '@testing-library/react'
-import { useStore } from './useStore'
+import { mergePersistedState, useStore } from './useStore'
 
 describe('Zustand Store', () => {
   // Reset store before each test to ensure isolation
@@ -1297,5 +1297,31 @@ describe('Zustand Store', () => {
     act(() => { store.undo() })
     act(() => { store.pushUndo() })
     expect(useStore.getState().redoStack.length).toBe(0)
+  })
+})
+
+describe('mergePersistedState', () => {
+  const library = {
+    userPresets: [{ name: 'Mine', transforms: { scale: 2 } }],
+    snapshots: [{ id: 'snap-1', transforms: { scale: 3 } }],
+    mediaLibrary: [{ id: 'media-1', type: 'image', src: 'file:///a.png', name: 'a.png' }],
+    midi: { isEnabled: true, mappings: { '1-cc-10': 'transforms.scale' } },
+  }
+
+  it('keeps the user library when the schema version changes', () => {
+    const current = useStore.getState()
+    const merged = mergePersistedState({ schemaVersion: -1, ...library, transforms: { x: 9, y: 9, scale: 4, rotation: 90 } }, current)
+
+    expect(merged.userPresets).toEqual(library.userPresets)
+    expect(merged.snapshots).toEqual(library.snapshots)
+    expect(merged.mediaLibrary).toEqual(library.mediaLibrary)
+    expect(merged.midi.mappings).toEqual(library.midi.mappings)
+    // The live look itself resets to defaults
+    expect(merged.transforms).toEqual(current.transforms)
+  })
+
+  it('returns current state untouched on first launch', () => {
+    const current = useStore.getState()
+    expect(mergePersistedState(undefined, current)).toBe(current)
   })
 })

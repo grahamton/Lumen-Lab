@@ -2,32 +2,13 @@ import React, { useRef, useMemo, useCallback, useEffect } from 'react'
 import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
+import { createMediaAsset } from '../../utils/mediaFiles'
 
 // fractal generator exists in engine but has no UI params yet
 const GENERATORS = ['fibonacci', 'voronoi', 'grid', 'liquid', 'plasma']
 const GEN_LABELS = {
   fibonacci: 'FIBONACCI', voronoi: 'VORONOI', grid: 'GRID',
   liquid: 'LIQUID', plasma: 'PLASMA',
-}
-
-function toFileUrl(filePath) {
-  const normalized = filePath.replace(/\\/g, '/')
-  const withLeadingSlash = /^[A-Za-z]:/.test(normalized) ? `/${normalized}` : normalized
-  // Encode per segment so '#', '?' and '%' in file names survive.
-  const encoded = withLeadingSlash
-    .split('/')
-    .map((segment) => (/^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
-    .join('/')
-  return `file://${encoded}`
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
 }
 
 const KnobSlider = React.memo(function KnobSlider({ label, section, param, value, onChange }) {
@@ -136,27 +117,7 @@ export function TopStrip() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Packaged builds reference the file on disk so it survives restarts without
-    // bloating saved state; dev (http origin) can't load file:// URLs.
-    const filePath = window.location.protocol === 'file:'
-      ? window.electronAPI?.getPathForFile?.(file) || ''
-      : ''
-    const runtimeUrl = filePath
-      ? toFileUrl(filePath)
-      : file.type.startsWith('image/')
-        ? await readFileAsDataUrl(file)
-        : URL.createObjectURL(file)
-
-    const asset = {
-      id: `media-${Date.now()}-${Math.round(Math.random() * 1000)}`,
-      type: file.type.startsWith('video/') ? 'video' : 'image',
-      src: runtimeUrl,
-      name: file.name,
-      mimeType: file.type,
-      persistMode: filePath
-        ? 'file'
-        : (file.type.startsWith('video/') ? 'object-url' : 'inline'),
-    }
+    const asset = await createMediaAsset(file)
 
     resetForUpload()
     addMediaAsset(asset)

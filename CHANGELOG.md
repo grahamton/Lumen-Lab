@@ -4,6 +4,20 @@ All notable changes to Lumen Lab are documented here.
 
 ## [Unreleased]
 
+### Added
+- Drop an image or video anywhere on the window to load it
+
+### Fixed
+- A schema change on update no longer wipes presets, snapshots, scenes, the media library, MIDI mappings, or projector profiles; only the live look resets
+- Video decoders are released when switching away from a video
+- Hard Reset asks for confirmation before erasing saved data
+
+### Release
+- Intel Mac build alongside Apple Silicon
+- Releases are named "Lumen Lab vX.Y.Z" with notes taken from this changelog; a tag without a changelog section fails the release
+- Linux desktop entry matches the window (taskbar grouping)
+- GitHub Actions moved to checkout/setup-node v7 (Node 24 runtime)
+
 ## [1.3.0] — 2026-10-26
 
 ### Changed
