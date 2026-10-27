@@ -1,17 +1,19 @@
 import React, { useRef, useMemo, useCallback, useEffect } from 'react'
-import { getEffectiveAuthoredSceneState, useStore } from '../../store/useStore'
+import { getEffectiveAuthoredSceneState, useStore, DEFAULTS } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { CONTROLS } from '../../config/uiConfig'
 import { createMediaAsset } from '../../utils/mediaFiles'
+import { formatControlValue } from '../../config/helpText'
 
 // fractal generator exists in engine but has no UI params yet
 const GENERATORS = ['fibonacci', 'voronoi', 'grid', 'liquid', 'plasma']
 const GEN_LABELS = {
-  fibonacci: 'FIBONACCI', voronoi: 'VORONOI', grid: 'GRID',
-  liquid: 'LIQUID', plasma: 'PLASMA',
+  fibonacci: 'SPIRAL', voronoi: 'CELLS', grid: 'GRID',
+  liquid: 'LAVA', plasma: 'PLASMA',
 }
 
 const KnobSlider = React.memo(function KnobSlider({ label, section, param, value, onChange }) {
+  const notify = useStore((state) => state.notify)
   const cfg = CONTROLS[section]?.[param]
   const pct = cfg
     ? Math.max(0, Math.min(1, (value - cfg.min) / (cfg.max - cfg.min)))
@@ -23,8 +25,15 @@ const KnobSlider = React.memo(function KnobSlider({ label, section, param, value
   }), [fillDeg])
   if (!cfg) return null
 
+  function handleReset() {
+    const fallback = DEFAULTS[section]?.[param]
+    if (typeof fallback !== 'number') return
+    onChange(fallback)
+    notify?.(`Reset ${cfg.label}`)
+  }
+
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1 min-w-0" data-help={`${section}.${param}`}>
       <div className="relative w-11 h-11">
         <div
           className="w-full h-full rounded-full border-2 border-neutral-700"
@@ -38,24 +47,27 @@ const KnobSlider = React.memo(function KnobSlider({ label, section, param, value
           step={cfg.step}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
+          onDoubleClick={handleReset}
           aria-label={label}
+          aria-valuetext={formatControlValue(section, param, value, cfg.step)}
+          title="Double-click to reset"
           className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
         />
       </div>
-      <span className="text-[8px] text-neutral-500 tracking-widest">{label}</span>
-      <span className="text-[8px] text-cyan-400 tabular-nums">
-        {typeof value === 'number' ? value.toFixed(2) : value}
+      <span className="text-[10px] text-neutral-400 tracking-wider text-center leading-tight">{label}</span>
+      <span className="text-[11px] text-cyan-400 tabular-nums">
+        {formatControlValue(section, param, value, cfg.step)}
       </span>
     </div>
   )
 })
 
-export function TopStrip() {
+export const TopStrip = React.memo(function TopStrip() {
   const fileRef = useRef(null)
   const {
     generatorType, generatorParam3, transformsScale, colorHue,
     activeMediaId, media, mediaLibrary, image,
-    addMediaAsset, setActiveMediaAsset, setGenerator, setTransform, setColor, setImage, resetForUpload
+    addMediaAsset, setActiveMediaAsset, setGenerator, setTransform, setColor, setImage, resetForUpload, pushUndo
   } = useStore(
     useShallow((state) => ({
       generatorType:   getEffectiveAuthoredSceneState(state).generator.type,
@@ -73,6 +85,7 @@ export function TopStrip() {
       setColor:        state.setColor,
       setImage:        state.setImage,
       resetForUpload:  state.resetForUpload,
+      pushUndo:        state.pushUndo,
     }))
   )
 
@@ -95,7 +108,10 @@ export function TopStrip() {
       vid.loop = true
       vid.muted = true
       vid.playsInline = true
-      vid.addEventListener('loadeddata', () => { setImage(vid) }, { once: true })
+      vid.addEventListener('loadeddata', () => {
+        setImage(vid)
+        vid.play().catch(() => {})
+      }, { once: true })
       vid.addEventListener('error', () => { setImage(null) }, { once: true })
       vid.src = asset.src
       vid.load()
@@ -119,6 +135,7 @@ export function TopStrip() {
 
     const asset = await createMediaAsset(file)
 
+    pushUndo()
     resetForUpload()
     addMediaAsset(asset)
     e.target.value = ''
@@ -126,28 +143,30 @@ export function TopStrip() {
 
   return (
     <div className="px-3 pt-3 pb-2 border-b border-neutral-800 bg-neutral-900/20 shrink-0">
-      <p className="text-[8px] text-cyan-400 tracking-[3px] mb-2">GENERATOR</p>
+      <p className="text-[10px] text-cyan-400 tracking-[3px] mb-2">PICK A PATTERN</p>
       <div className="grid grid-cols-3 gap-1 mb-3">
         {GENERATORS.map((g) => (
           <button
             key={g}
+            data-help={`generator.${g}`}
             onClick={() => setGenerator('type', g)}
             aria-pressed={generatorType === g}
-            className={`py-1.5 rounded text-[8px] tracking-wider border transition-colors ${
+            className={`py-2 rounded text-[10px] tracking-wider border transition-colors ${
               generatorType === g
                 ? 'bg-cyan-950 border-cyan-400 text-cyan-400'
-                : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
+                : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:border-neutral-500'
             }`}
           >
             {GEN_LABELS[g]}
           </button>
         ))}
         <button
+          data-help="generator.image"
           onClick={() => fileRef.current?.click()}
-          className={`py-1.5 rounded text-[8px] tracking-wider border truncate transition-colors ${
+          className={`py-2 rounded text-[10px] tracking-wider border truncate transition-colors ${
             imageActive
               ? 'bg-cyan-950 border-cyan-400 text-cyan-400'
-              : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
+              : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:border-neutral-500'
           }`}
         >
           {imageActive ? imageLabel.toUpperCase() : 'IMAGE'}
@@ -155,9 +174,9 @@ export function TopStrip() {
         <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileChange} />
       </div>
       {mediaLibrary?.length > 0 && (
-        <div className="mb-3">
-          <div className="mb-1 flex items-center justify-between text-[8px] tracking-[0.18em] text-neutral-500">
-            <span>MEDIA BIN</span>
+        <div className="mb-3" data-help="media.bin">
+          <div className="mb-1 flex items-center justify-between text-[10px] tracking-[0.18em] text-neutral-400">
+            <span>YOUR MEDIA</span>
             <span className="text-cyan-300">{mediaLibrary.length}</span>
           </div>
           <select
@@ -165,7 +184,8 @@ export function TopStrip() {
             onChange={(event) => {
               const asset = mediaLibrary.find((entry) => String(entry.id) === event.target.value)
               if (!asset) return
-              resetForUpload()
+              // Switching clips keeps the current look; only the source changes.
+              setGenerator('type', 'none')
               setActiveMediaAsset(asset.id)
             }}
             className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-[10px] tracking-[0.16em] text-neutral-200 outline-none focus:border-cyan-400"
@@ -180,21 +200,21 @@ export function TopStrip() {
       )}
       <div className="grid grid-cols-3 gap-2">
         <KnobSlider
-          label="SCALE"
+          label="ZOOM"
           section="transforms"
           param="scale"
           value={transformsScale}
           onChange={handleScaleChange}
         />
         <KnobSlider
-          label="SPEED"
+          label="PATTERN SPEED"
           section="generator"
           param="param3"
           value={generatorParam3}
           onChange={handleParam3Change}
         />
         <KnobSlider
-          label="HUE"
+          label="COLOR SHIFT"
           section="color"
           param="hue"
           value={colorHue}
@@ -203,4 +223,4 @@ export function TopStrip() {
       </div>
     </div>
   )
-}
+})
