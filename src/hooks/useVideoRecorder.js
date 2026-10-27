@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { subscribeCanvasFrames } from '../utils/canvasFrameBus'
 
 export function useVideoRecorder(gl) {
   const mediaRecorderRef = useRef(null)
+  const unsubscribeFramesRef = useRef(null)
   const chunksRef = useRef([])
   const [isRecording, setIsRecording] = useState(false)
   const [startTime, setStartTime] = useState(null)
@@ -18,13 +20,34 @@ export function useVideoRecorder(gl) {
     return () => clearInterval(interval)
   }, [isRecording, startTime])
 
+  // Stop copying frames if the canvas unmounts mid-recording.
+  useEffect(() => () => unsubscribeFramesRef.current?.(), [])
+
   const startRecording = () => {
     if (!gl || !gl.domElement) return
 
-    const stream = gl.domElement.captureStream(60) // 60 FPS
-    const recorder = new MediaRecorder(stream, {
-      mimeType: 'video/webm;codecs=vp9' // High quality format
+    // Record a 2D mirror fed from the render loop: captureStream() on a WebGPU
+    // canvas isn't reliable, and its pixels are only readable in the frame's task.
+    const source = gl.domElement
+    const mirror = document.createElement('canvas')
+    mirror.width = source.width
+    mirror.height = source.height
+    const mirrorContext = mirror.getContext('2d')
+    unsubscribeFramesRef.current = subscribeCanvasFrames(source, () => {
+      if (mirror.width !== source.width || mirror.height !== source.height) {
+        mirror.width = source.width
+        mirror.height = source.height
+      }
+      // Clear first: drawing over the last frame would leave ghosts wherever the
+      // source is transparent (circle crop, media moved off its old bounds).
+      mirrorContext.clearRect(0, 0, mirror.width, mirror.height)
+      mirrorContext.drawImage(source, 0, 0)
     })
+
+    const stream = mirror.captureStream(60) // 60 FPS
+    const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+      .find((type) => MediaRecorder.isTypeSupported(type))
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data)
@@ -37,8 +60,11 @@ export function useVideoRecorder(gl) {
       a.href = url
       a.download = `LumenLab_Rec_${Date.now()}.webm`
       a.click()
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
       chunksRef.current = [] // Reset chunks
+      stream.getTracks().forEach((track) => track.stop())
+      unsubscribeFramesRef.current?.()
+      unsubscribeFramesRef.current = null
     }
 
     recorder.start()

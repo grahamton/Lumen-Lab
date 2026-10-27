@@ -13,7 +13,12 @@ const GEN_LABELS = {
 function toFileUrl(filePath) {
   const normalized = filePath.replace(/\\/g, '/')
   const withLeadingSlash = /^[A-Za-z]:/.test(normalized) ? `/${normalized}` : normalized
-  return encodeURI(`file://${withLeadingSlash}`)
+  // Encode per segment so '#', '?' and '%' in file names survive.
+  const encoded = withLeadingSlash
+    .split('/')
+    .map((segment) => (/^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
+    .join('/')
+  return `file://${encoded}`
 }
 
 function readFileAsDataUrl(file) {
@@ -131,8 +136,13 @@ export function TopStrip() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const runtimeUrl = typeof file.path === 'string' && file.path.length > 0
-      ? toFileUrl(file.path)
+    // Packaged builds reference the file on disk so it survives restarts without
+    // bloating saved state; dev (http origin) can't load file:// URLs.
+    const filePath = window.location.protocol === 'file:'
+      ? window.electronAPI?.getPathForFile?.(file) || ''
+      : ''
+    const runtimeUrl = filePath
+      ? toFileUrl(filePath)
       : file.type.startsWith('image/')
         ? await readFileAsDataUrl(file)
         : URL.createObjectURL(file)
@@ -143,7 +153,7 @@ export function TopStrip() {
       src: runtimeUrl,
       name: file.name,
       mimeType: file.type,
-      persistMode: typeof file.path === 'string' && file.path.length > 0
+      persistMode: filePath
         ? 'file'
         : (file.type.startsWith('video/') ? 'object-url' : 'inline'),
     }

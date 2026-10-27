@@ -3,7 +3,7 @@ name: run-lumenlab
 description: Build, run, and drive the Lumen Lab Electron desktop app. Use when asked to start the app, run it, take a screenshot of its UI, build it, interact with its controls, or test visual changes in the running app.
 ---
 
-Lumen Lab is a real-time visual synthesizer — an Electron app that uses React + Three.js (WebGL) for a live canvas. For agent/automated use, drive it via the Playwright REPL at `.claude/skills/run-lumenlab/driver.mjs`. The driver starts the Vite dev server automatically, launches Electron, and exposes a command interface for screenshots and interactions.
+Lumen Lab is a real-time visual synthesizer — an Electron app that uses React + Three.js (`WebGPURenderer`, falling back to WebGL2) for a live canvas. For agent/automated use, drive it via the Playwright REPL at `.claude/skills/run-lumenlab/driver.mjs`. The driver starts the Vite dev server automatically, launches Electron, and exposes a command interface for screenshots and interactions.
 
 All paths are relative to the project root (`C:\dev\Lumenlab` or wherever the repo is cloned).
 
@@ -116,6 +116,12 @@ npm test -- --run
 - **6-second hydration wait is blind** — there's no clean "app is ready" signal from Electron. The driver sleeps 6s after `electron.launch()` returns. If you're on a very slow machine, increase this in the driver.
 
 - **`APP_DIR` path goes 4 levels up from `driver.mjs`** — the file is at `.claude/skills/run-lumenlab/driver.mjs`, so `path.resolve(import.meta.url, '../../../..')` is needed to reach the project root (not 3 levels).
+
+- **GPU canvases are only readable in the frame they were drawn.** `drawImage`/`toBlob` on the visualizer canvas from a later task returns transparent pixels on WebGPU and on the WebGL2 fallback (no `preserveDrawingBuffer`). Read pixels via `subscribeCanvasFrames` in `src/utils/canvasFrameBus.js`, or use Playwright screenshots, which go through the compositor.
+
+- **Testing WebGPU on a GPU-less Linux box** needs headed Chromium under xvfb with SwiftShader Vulkan: `chromium.launch({ channel: 'chromium', headless: false, args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan,WebGPUService', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--disable-vulkan-surface'] })`. Headless shell exposes an adapter but never presents frames. Expect 2–10 fps; give screenshots long timeouts. Append `?renderer=webgl` to the dev URL to test the fallback, which is much faster here.
+
+- **Deterministic frames:** set `ui.globalPause` (it persists), wait ~1s for the debounced save, then reload — generator time stays at 0 from the first frame.
 
 ## Troubleshooting
 

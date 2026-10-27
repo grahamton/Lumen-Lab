@@ -19,8 +19,11 @@ if (!heroPath) {
 const hero = await readFile(`dist${heroPath}`)
 const heroUrl = `data:image/png;base64,${hero.toString('base64')}`
 const standaloneScript = script.replaceAll(heroPath, heroUrl)
+const favicon = await readFile('dist/favicon.png')
+const faviconUrl = `data:image/png;base64,${favicon.toString('base64')}`
 const standalonePage = index
   .replace(/<link rel="manifest"[^>]*><script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/, '')
+  .replace('href="/favicon.png"', `href="${faviconUrl}"`)
 
 const workerSource = `const page = ${JSON.stringify(standalonePage)}
 const script = ${JSON.stringify(standaloneScript)}

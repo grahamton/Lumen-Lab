@@ -1,6 +1,6 @@
 # Lumen Lab ⚡
 
-A real-time visual synthesizer for Windows — built on Electron, React, and Three.js. Feed it math, images, or video and it generates psychedelic, audio-reactive visuals you can perform with live.
+A real-time visual synthesizer — built on Electron, React, and Three.js (WebGPU, with WebGL2 fallback). Feed it math, images, or video and it generates psychedelic, audio-reactive visuals you can perform with live.
 
 Built for VJs, textile artists, and screen printers.
 
@@ -20,7 +20,7 @@ The desktop app is the performance environment; a web companion and mobile apps 
 - **Drift Mode** — slow sinusoidal animation that mutates the canvas without touching controls
 - **Presets** — 10+ built-ins, import/export your own, and animate snapshot transitions (loop/ping-pong/once)
 - **Undo/Redo** — Ctrl+Z / Ctrl+Shift+Z, 20-step history
-- **Capture** — Record to `.webm`, export 4K PNG snapshots
+- **Capture** — Record to `.webm`, export 4K PNG stills (effects included)
 - **Autosave** — state persists across sessions automatically
 
 ---
@@ -32,7 +32,9 @@ The desktop app is the performance environment; a web companion and mobile apps 
 | `H` | Hide / show sidebar |
 | `F` | Fullscreen |
 | `R` | Record toggle |
-| `S` | Snapshot (4K PNG) |
+| `S` | Save state snapshot |
+| `B` | Blackout |
+| `P` / `Shift+P` | Cycle test pattern mode / type |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` | Redo |
 
@@ -40,9 +42,13 @@ The desktop app is the performance environment; a web companion and mobile apps 
 
 ## 📥 Download
 
-Download the latest Windows installer from the [Releases page](https://github.com/grahamton/Lumen-Lab/releases/latest).
+Download the latest installer from the [Releases page](https://github.com/grahamton/Lumen-Lab/releases/latest).
 
 > Windows SmartScreen may flag this as an unknown app — click **More Info → Run Anyway**.
+
+### Renderer
+
+Lumen Lab renders with WebGPU when the GPU and driver support it and falls back to WebGL2 automatically. If visuals glitch on a particular machine, force the WebGL2 path by launching with `--force-webgl` (or setting `LUMEN_RENDERER=webgl`); in dev, append `?renderer=webgl` to the URL.
 
 ---
 
@@ -52,8 +58,8 @@ Download the latest Windows installer from the [Releases page](https://github.co
 npm install
 npm run dev          # Vite dev server on localhost:5173
 npm run electron     # Launch Electron (loads localhost:5173)
-npm run dist         # Build + package Windows NSIS installer → release/
-npm run test -- --run # Vitest suite (74 tests)
+npm run dist         # Build + package installer for the current OS → release/
+npm run test -- --run # Vitest suite
 ```
 
 **Key files:**
@@ -61,10 +67,11 @@ npm run test -- --run # Vitest suite (74 tests)
 | File | Role |
 |------|------|
 | `src/store/useStore.js` | All app state (Zustand) |
-| `src/components/CanvasGL.jsx` | Three.js canvas, shader uniforms, post-processing |
+| `src/components/CanvasGL.jsx` | WebGPU renderer, uniforms, export, projection compositor |
 | `src/components/controls/ControlsShell.jsx` | Sidebar composition and navigation |
 | `src/components/controls/SectionOutput.jsx` | Projection mapping and output controls |
-| `src/shaders/visualizer.frag` | All visual logic in GLSL |
+| `src/shaders/visualizerNode.js` | All visual logic in TSL (compiles to WGSL / GLSL) |
+| `src/shaders/effectsPipeline.js` | Bloom, chromatic aberration, grain (`RenderPipeline`) |
 | `src/config/uiConfig.js` | Slider min/max/step config |
 | `src/presets.js` | Built-in preset definitions |
 | `electron/main.js` | Electron main process |
