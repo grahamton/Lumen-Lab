@@ -31,6 +31,8 @@ jobs:
       - run: npm run build
       # Fails the release if CHANGELOG.md has no section for this version.
       - run: node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > build/release-notes.md
-      - run: npx electron-builder --publish always "-c.releaseInfo.releaseName=Lumen Lab ${GITHUB_REF_NAME}"
+      # Pass the notes path explicitly: electron-builder only reads a release body
+      # from releaseNotesFile or a project-root release-notes.md.
+      - run: npx electron-builder --publish always "-c.releaseInfo.releaseName=Lumen Lab ${GITHUB_REF_NAME}" -c.releaseInfo.releaseNotesFile=build/release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
