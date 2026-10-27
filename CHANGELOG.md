@@ -4,6 +4,38 @@ All notable changes to Lumen Lab are documented here.
 
 ## [Unreleased]
 
+### Added
+- Hover info bar: every control explains itself in plain language at the bottom of the panel
+- Surprise Me button, double-click any slider or knob to reset it, saved looks (S) shown as chips in Presets
+- Toasts for shortcuts (blackout, alignment grid, save look, record, undo), a BLACKOUT pill, and a warning when storage is full
+- Banner at the top of the panel while a saved look is being edited
+- First launch starts on a moving look instead of a black frame
+
+### Changed
+- Plain-language labels throughout (Spiral, Cells, Lava, Zoom, Pattern speed, Mirror, Wobble, Bend, Glow, Color split, Line up projector, Mapped shapes, Saved looks...)
+- Help rewritten as four short steps with the real shortcuts; Esc or backdrop closes it, `?` reopens it
+- Output panel: an always-visible Projector block, with shapes, saved looks and alignments in a collapsible Advanced block; inline confirms replace browser dialogs
+- Calibration and shape handles stay on screen and clear of the panel; new shapes start inset
+- Pattern speed now affects every pattern; rotation is in degrees; Fewer colors can be turned off
+- Effects keep a consistent colour response, and glow no longer washes the frame out to white
+
+### Fixed
+- Six built-in presets rendered black (partial preset data reached the shader as NaN)
+- Glow + colour split failed to compile on the WebGL2 backend
+- Undo only covered randomize/reset; every look edit is now undoable, one step per drag
+- Nothing was saved while audio-reactive mode or animation was running; images over ~1.5 MB overflowed storage
+- Uploaded videos stayed frozen on the main canvas; browser-session videos left dead entries after reload
+- Shortcuts fired with Ctrl/Alt, on key repeat, inside dropdowns and behind the help dialog, and were dead after touching a slider
+- Audio file input was silent; a denied microphone left the toggle on
+- Snapshot animation never started; MIDI clock messages churned state
+- Duplicated surfaces were distorted; output window and overlay states reopened after restart
+- Packaged app allowed navigating to arbitrary local files
+
+### Performance
+- Audio meters and projector sync no longer re-render the whole UI 20-30 times a second
+- Adjusting colour split or grain no longer recompiles shaders
+- Rendering capped at 1.5x pixel density; the hidden main canvas skips drawing behind mapped shapes
+
 ## [1.3.0] — 2026-10-26
 
 ### Changed
