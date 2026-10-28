@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { TopStrip } from './TopStrip'
+import { MidiLearnBar } from './MidiLearnBar'
 import { CollapsibleSection } from './CollapsibleSection'
 import { SectionGeometry } from './SectionGeometry'
 import { SectionColor } from './SectionColor'
@@ -101,6 +102,8 @@ export function ControlsShell({ className = '' }) {
 
       {/* TopStrip */}
       <TopStrip />
+
+      <MidiLearnBar />
 
       {/* Collapsible sections */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">

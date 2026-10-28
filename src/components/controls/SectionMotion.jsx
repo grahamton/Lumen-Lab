@@ -48,7 +48,7 @@ export const SectionMotion = React.memo(function SectionMotion({ onInteract }) {
       />
       <ControlGroup
         section="animation"
-        param="speed"
+        param="bpm"
         value={animationBpm}
         onChange={wrap((v) => setAnimation('bpm', v))}
       />

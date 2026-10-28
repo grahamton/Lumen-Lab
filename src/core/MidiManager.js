@@ -75,6 +75,10 @@ export class MidiManager {
     if (command === 128 || (command === 144 && data2 === 0)) type = 'noteOff'
     if (command === 176) type = 'cc'
 
+    // Clock, active sensing, pitch bend etc. can't be mapped and would only
+    // churn the store at up to 24 messages per beat.
+    if (type === 'unknown') return
+
     const msg = {
       type,
       channel: channel + 1,
