@@ -1341,8 +1341,10 @@ describe('mergePersistedState', () => {
     expect(merged.transforms).toEqual(current.transforms)
   })
 
-  it('returns current state untouched on first launch', () => {
+  it('starts a first launch on the moving starter look, keeping everything else', () => {
     const current = useStore.getState()
-    expect(mergePersistedState(undefined, current)).toBe(current)
+    const merged = mergePersistedState(undefined, current)
+    expect(merged.flux.enabled).toBe(true)
+    expect(merged.userPresets).toEqual(current.userPresets)
   })
 })
