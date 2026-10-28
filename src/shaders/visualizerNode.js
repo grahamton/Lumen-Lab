@@ -1,11 +1,17 @@
 // TSL port of the visualizer shader. Compiles to WGSL on WebGPU and GLSL on the
 // WebGL2 fallback backend, so one source drives both renderers.
+//
+// Two passes: the mesh material renders the content (generator or image after
+// tiling, symmetry, warp and transforms) once per pixel, then the effects node
+// grades and post-processes that texture inside the effects pipeline.
 import {
   Fn,
   If,
+  Loop,
   PI,
   TWO_PI,
   abs,
+  array,
   atan,
   clamp,
   cos,
@@ -13,6 +19,7 @@ import {
   float,
   floor,
   fract,
+  int,
   length,
   log,
   max,
@@ -32,9 +39,17 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import { MeshBasicNodeMaterial, Texture, Vector2, Vector3, Vector4 } from 'three/webgpu'
+import { MeshBasicNodeMaterial, NoBlending, Texture, Vector2, Vector3, Vector4 } from 'three/webgpu'
 
 const LUMA = vec3(0.299, 0.587, 0.114)
+// Edge taps in content texels: the Laplacian uses the first four, Sobel all eight.
+const EDGE_TAPS = array([
+  vec2(0.0, 1.0), vec2(0.0, -1.0), vec2(-1.0, 0.0), vec2(1.0, 0.0),
+  vec2(-1.0, 1.0), vec2(1.0, 1.0), vec2(-1.0, -1.0), vec2(1.0, -1.0),
+])
+// How far (in content texels) a texture tap may land from its target before
+// the tap evaluates the content directly instead.
+const TAP_TOLERANCE = 0.25
 
 // --- NOISE & MATH HELPERS ---
 
@@ -102,8 +117,10 @@ const fbm = Fn(([st0]) => {
 }).setLayout({ name: 'llFbm', type: 'float', inputs: [{ name: 'st', type: 'vec2' }] })
 
 /**
- * Builds the visualizer material. The returned `uniforms` object mirrors the
- * old ShaderMaterial uniform map: every entry exposes a mutable `.value`.
+ * Builds the visualizer: the content material for the scene mesh and
+ * `createEffectsNode` for the effects pipeline. The returned `uniforms` object
+ * mirrors the old ShaderMaterial uniform map: every entry exposes a mutable
+ * `.value`.
  */
 export function createVisualizerMaterial() {
   const placeholder = new Texture()
@@ -141,6 +158,11 @@ export function createVisualizerMaterial() {
     uEdgeQuality, uGenType, uGenParams,
   } = uniforms
 
+  // Functions that read uniforms are inlined rather than laid out: three caches
+  // a laid-out function's code per backend, so a second shader using it (the
+  // effects stage, an RTT) would miss the uniform declarations. Inlined
+  // functions copy their argument into a var, since it is read inside branches.
+
   // --- GENERATORS ---
 
   const fibonacciSpiral = Fn(([p]) => {
@@ -149,7 +171,7 @@ export function createVisualizerMaterial() {
     const theta = atan(center.y, center.x).add(uGenTime.mul(0.1))
     const spiral = sin(log(r.add(0.0001)).mul(10.0).add(theta.mul(uGenParams.x)))
     return vec3(smoothstep(-0.2, 0.2, spiral))
-  }).setLayout({ name: 'llFibonacci', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
   const voronoi = Fn(([p]) => {
     const st = p.mul(uGenParams.x).mul(0.1).add(1.0)
@@ -164,7 +186,7 @@ export function createVisualizerMaterial() {
       }
     }
     return vec3(smoothstep(0.0, uGenParams.y.mul(0.01).add(0.1), minDist))
-  }).setLayout({ name: 'llVoronoi', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
   const basicGrid = Fn(([p]) => {
     const st = p.mul(uGenParams.x).mul(0.2)
@@ -174,7 +196,7 @@ export function createVisualizerMaterial() {
     const lineX = smoothstep(thick.sub(soft), thick.add(soft), grid.x)
     const lineY = smoothstep(thick.sub(soft), thick.add(soft), grid.y)
     return vec3(float(1.0).sub(min(lineX, lineY)))
-  }).setLayout({ name: 'llGrid', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
   const liquid = Fn(([p]) => {
     const st = p.mul(uGenParams.x).mul(0.05)
@@ -186,7 +208,7 @@ export function createVisualizerMaterial() {
       val.mul(cos(uGenTime.add(n))),
       val,
     )
-  }).setLayout({ name: 'llLiquid', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
   const plasma = Fn(([p]) => {
     const st = p.mul(uGenParams.x).mul(0.1)
@@ -202,7 +224,7 @@ export function createVisualizerMaterial() {
       sin(phase.add(2.0)).mul(0.5).add(0.5),
       sin(phase.add(4.0)).mul(0.5).add(0.5),
     )
-  }).setLayout({ name: 'llPlasma', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
   const fractalNoise = Fn(([p]) => {
     const st = p.mul(uGenParams.x).mul(0.05)
@@ -218,11 +240,12 @@ export function createVisualizerMaterial() {
     const deep = mix(base, vec3(0.0, 0.0, 0.164706), clamp(length(q), 0.0, 1.0))
     const color = mix(deep, vec3(0.666667, 1.0, 1.0), clamp(abs(r.x), 0.0, 1.0))
     return color.mul(uGenParams.y.mul(0.02).add(0.5))
-  }).setLayout({ name: 'llFractal', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
   // --- CONTENT FETCHER ---
 
-  const getContent = Fn(([p]) => {
+  const getContent = Fn(([pIn]) => {
+    const p = vec2(pIn).toVar()
     const result = vec4(0.0).toVar()
     If(uGenType.greaterThan(0.5), () => {
       const gen = vec3(0.0).toVar()
@@ -238,14 +261,14 @@ export function createVisualizerMaterial() {
       () => { result.assign(uTexture.sample(p)) },
     )
     return result
-  }).setLayout({ name: 'llGetContent', type: 'vec4', inputs: [{ name: 'p', type: 'vec2' }] })
+  })
 
-  const lumaAt = (coord, offset) => dot(getContent(coord.add(offset)).rgb, LUMA)
+  // --- COORDINATE CHAIN ---
 
-  // --- MAIN ---
-
-  const visualizer = Fn(() => {
-    const vUv = uv()
+  // Screen UV (bottom-up, as on the mesh) to content coordinate: tiling,
+  // displacement, symmetry, warp, transform and image fit. Both passes use it.
+  const contentCoord = Fn(([uvIn]) => {
+    const vUv = vec2(uvIn).toVar()
     const st = vec2(vUv).toVar()
 
     // 1. Tiling
@@ -306,86 +329,129 @@ export function createVisualizerMaterial() {
       coord.y.mulAssign(uAspect.div(uImageAspect))
     })
     coord.addAssign(0.5)
-
-    // 7. Base content
-    const texColor = getContent(coord).toVar()
-
-    // HSL grading (additive saturation so grayscale generators pick up color)
-    const hsb = rgb2hsb(texColor.rgb)
-    const color = hsb2rgb(vec3(
-      fract(hsb.x.add(uColorHSL.x)),
-      clamp(hsb.y.add(uColorHSL.y.sub(1.0)), 0.0, 1.0),
-      clamp(hsb.z.mul(uColorHSL.z), 0.0, 1.0),
-    )).toVar()
-
-    // 8. Effects
-    If(uEffects.w.greaterThan(0.0), () => {
-      const shift = uEffects.w.mul(0.01)
-      color.assign(vec3(
-        getContent(coord.sub(vec2(shift, 0.0))).r,
-        color.g,
-        getContent(coord.add(vec2(shift, 0.0))).b,
-      ))
-    })
-
-    If(uEffects.x.greaterThan(0.0), () => {
-      const texel = vec2(1.0).div(uResolution)
-      const edge = float(0.0).toVar()
-      If(uEdgeQuality.greaterThan(0.5), () => {
-        // Full Sobel (9 taps)
-        const tl = lumaAt(coord, texel.mul(vec2(-1.0, 1.0)))
-        const t = lumaAt(coord, texel.mul(vec2(0.0, 1.0)))
-        const tr = lumaAt(coord, texel.mul(vec2(1.0, 1.0)))
-        const l = lumaAt(coord, texel.mul(vec2(-1.0, 0.0)))
-        const r = lumaAt(coord, texel.mul(vec2(1.0, 0.0)))
-        const bl = lumaAt(coord, texel.mul(vec2(-1.0, -1.0)))
-        const b = lumaAt(coord, texel.mul(vec2(0.0, -1.0)))
-        const br = lumaAt(coord, texel.mul(vec2(1.0, -1.0)))
-        const gx = tl.negate().sub(l.mul(2.0)).sub(bl).add(tr).add(r.mul(2.0)).add(br)
-        const gy = tl.negate().sub(t.mul(2.0)).sub(tr).add(bl).add(b.mul(2.0)).add(br)
-        edge.assign(clamp(sqrt(gx.mul(gx).add(gy.mul(gy))), 0.0, 1.0))
-      }).Else(() => {
-        // Fast Laplacian (5 taps)
-        const center = lumaAt(coord, vec2(0.0))
-        const n = lumaAt(coord, texel.mul(vec2(0.0, 1.0)))
-        const so = lumaAt(coord, texel.mul(vec2(0.0, -1.0)))
-        const e = lumaAt(coord, texel.mul(vec2(1.0, 0.0)))
-        const w = lumaAt(coord, texel.mul(vec2(-1.0, 0.0)))
-        edge.assign(clamp(abs(center.mul(4.0).sub(n).sub(so).sub(e).sub(w)), 0.0, 1.0))
-      })
-      color.assign(mix(color, vec3(edge), clamp(uEffects.x.mul(0.01), 0.0, 1.0)))
-    })
-
-    If(uEffects.y.greaterThan(0.0), () => {
-      color.assign(mix(color, color.oneMinus(), uEffects.y.mul(0.01)))
-    })
-
-    If(uEffects.z.greaterThan(0.0), () => {
-      const luma = dot(color, LUMA)
-      const sol = select(luma.greaterThan(0.5), color.oneMinus(), color)
-      color.assign(mix(color, sol, uEffects.z.mul(0.01)))
-    })
-
-    If(uPosterize.lessThan(255.0), () => {
-      color.assign(floor(color.mul(uPosterize)).div(uPosterize))
-    })
-
-    // 9. Circle mask
-    const alpha = texColor.a.toVar()
-    If(uShape.greaterThan(0.5), () => {
-      const dist = length(vec2(vUv.x.sub(0.5).mul(uAspect), vUv.y.sub(0.5)))
-      alpha.mulAssign(smoothstep(0.495, 0.505, dist).oneMinus())
-    })
-
-    return vec4(color, alpha)
+    return coord
   })
 
+  // --- PASS 1: CONTENT ---
+
+  // Raw content per pixel, written to the effects pipeline's scene pass. No
+  // blending, so the render target holds unpremultiplied colour and alpha.
   const material = new MeshBasicNodeMaterial()
   material.vertexNode = vec4(positionGeometry.xy, 0.0, 1.0)
-  material.fragmentNode = visualizer()
-  material.transparent = true
+  material.fragmentNode = Fn(() => getContent(contentCoord(uv())))()
+  material.blending = NoBlending
   material.depthWrite = false
   material.depthTest = false
 
-  return { material, uniforms, placeholder }
+  // --- PASS 2: GRADING & EFFECTS ---
+
+  /**
+   * Builds the grading/effects node that reads pass 1's texture. Edge detect
+   * samples that texture where the coordinate chain is close to linear; shift
+   * re-evaluates content because its offsets can reach past the screen.
+   * Disabled effects are left out of the shader.
+   */
+  function createEffectsNode(content, { edge = false, shift = false } = {}) {
+    return Fn(() => {
+      // Pass UVs run top-down; the coordinate chain uses the mesh's bottom-up UVs.
+      const passUv = uv()
+      const vUv = vec2(passUv.x, passUv.y.oneMinus())
+      const texColor = content.sample(passUv).toVar()
+
+      // HSL grading (additive saturation so grayscale generators pick up color)
+      const hsb = rgb2hsb(texColor.rgb)
+      const color = hsb2rgb(vec3(
+        fract(hsb.x.add(uColorHSL.x)),
+        clamp(hsb.y.add(uColorHSL.y.sub(1.0)), 0.0, 1.0),
+        clamp(hsb.z.mul(uColorHSL.z), 0.0, 1.0),
+      )).toVar()
+
+      const coord = edge || shift ? contentCoord(vUv).toVar() : null
+
+      if (shift) {
+        If(uEffects.w.greaterThan(0.0), () => {
+          const offset = uEffects.w.mul(0.01)
+          color.assign(vec3(
+            getContent(coord.sub(vec2(offset, 0.0))).r,
+            color.g,
+            getContent(coord.add(vec2(offset, 0.0))).b,
+          ))
+        })
+      }
+
+      if (edge) {
+        If(uEffects.x.greaterThan(0.0), () => {
+          const texel = vec2(1.0).div(uResolution)
+          // Edge taps sit one texel apart in content space. Map each offset to
+          // screen UV through the local Jacobian of the coordinate chain.
+          const h = texel.mul(0.25)
+          const du = contentCoord(vUv.add(vec2(h.x, 0.0))).sub(coord).div(h.x)
+          const dv = contentCoord(vUv.add(vec2(0.0, h.y))).sub(coord).div(h.y)
+          const det = du.x.mul(dv.y).sub(dv.x.mul(du.y))
+          const safeDet = select(det.lessThan(0.0), min(det, -1e-8), max(det, 1e-8)).toVar()
+
+          const sobel = uEdgeQuality.greaterThan(0.5)
+          const gx = float(0.0).toVar()
+          const gy = float(0.0).toVar()
+          const cross = float(0.0).toVar()
+          Loop({ start: int(0), end: select(sobel, int(8), int(4)), type: 'int', condition: '<' }, ({ i }) => {
+            const o = EDGE_TAPS.element(i)
+            const d = texel.mul(o)
+            const target = coord.add(d)
+            const tapUv = vUv.add(vec2(
+              dv.y.mul(d.x).sub(dv.x.mul(d.y)),
+              du.x.mul(d.y).sub(du.y.mul(d.x)),
+            ).div(safeDet)).toVar()
+            const miss = length(contentCoord(tapUv).sub(target).mul(uResolution))
+            const onScreen = tapUv.x.greaterThanEqual(0.0).and(tapUv.x.lessThanEqual(1.0))
+              .and(tapUv.y.greaterThanEqual(0.0)).and(tapUv.y.lessThanEqual(1.0))
+            const luma = float(0.0).toVar()
+            If(miss.lessThan(TAP_TOLERANCE).and(onScreen), () => {
+              luma.assign(dot(content.sample(vec2(tapUv.x, tapUv.y.oneMinus())).rgb, LUMA))
+            }).Else(() => {
+              // Warps, folds and seams bend the chain too much here.
+              luma.assign(dot(getContent(target).rgb, LUMA))
+            })
+            gx.addAssign(luma.mul(o.x).mul(abs(o.y).oneMinus().add(1.0)))
+            gy.addAssign(luma.mul(o.y.negate()).mul(abs(o.x).oneMinus().add(1.0)))
+            cross.addAssign(luma)
+          })
+          const edgeValue = select(
+            sobel,
+            // Full Sobel (8 taps)
+            clamp(sqrt(gx.mul(gx).add(gy.mul(gy))), 0.0, 1.0),
+            // Fast Laplacian (4 taps around the centre)
+            clamp(abs(dot(texColor.rgb, LUMA).mul(4.0).sub(cross)), 0.0, 1.0),
+          )
+          color.assign(mix(color, vec3(edgeValue), clamp(uEffects.x.mul(0.01), 0.0, 1.0)))
+        })
+      }
+
+      If(uEffects.y.greaterThan(0.0), () => {
+        color.assign(mix(color, color.oneMinus(), uEffects.y.mul(0.01)))
+      })
+
+      If(uEffects.z.greaterThan(0.0), () => {
+        const luma = dot(color, LUMA)
+        const sol = select(luma.greaterThan(0.5), color.oneMinus(), color)
+        color.assign(mix(color, sol, uEffects.z.mul(0.01)))
+      })
+
+      If(uPosterize.lessThan(255.0), () => {
+        color.assign(floor(color.mul(uPosterize)).div(uPosterize))
+      })
+
+      // Circle mask
+      const alpha = texColor.a.toVar()
+      If(uShape.greaterThan(0.5), () => {
+        const dist = length(vec2(vUv.x.sub(0.5).mul(uAspect), vUv.y.sub(0.5)))
+        alpha.mulAssign(smoothstep(0.495, 0.505, dist).oneMinus())
+      })
+
+      // Same result as the old single pass: normal blending over a transparent clear.
+      return vec4(color.mul(alpha), alpha)
+    })()
+  }
+
+  return { material, uniforms, placeholder, createEffectsNode }
 }
