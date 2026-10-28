@@ -117,12 +117,12 @@ describe('MIDI learn toggle and quantization', () => {
     useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 40, value: 0.37 })
     expect(getEffectiveAuthoredSceneState(useStore.getState()).symmetry.slices).toBe(13)
 
-    // posterize: 2..32 → 2 + 30 * 0.33 = 11.9
+    // posterize: 2..32 → 2 + 31 * 0.33 = 12.2
     useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 41, value: 0.33 })
     expect(useStore.getState().color.posterize).toBe(12)
 
     useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 41, value: 1 })
-    expect(useStore.getState().color.posterize).toBe(32)
+    expect(useStore.getState().color.posterize).toBe(33)
   })
 
   it('leaves fractional params smooth', () => {

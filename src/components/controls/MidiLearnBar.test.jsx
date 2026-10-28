@@ -52,7 +52,7 @@ describe('MidiLearnBar', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'MIDI LEARN' }))
-    fireEvent.pointerDown(screen.getByRole('slider', { name: 'Posterize' }))
+    fireEvent.pointerDown(screen.getByRole('slider', { name: 'Fewer Colors' }))
     expect(useStore.getState().ui.midiLearnId).toBe('color.posterize')
     expect(screen.getByText('● WAITING')).toBeInTheDocument()
 
@@ -61,7 +61,7 @@ describe('MidiLearnBar', () => {
     })
     expect(screen.getByText('CC20')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear MIDI mapping for Posterize' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear MIDI mapping for Fewer Colors' }))
     expect(screen.queryByText('CC20')).toBeNull()
     expect(useStore.getState().midi.mappings).toEqual({})
   })
@@ -75,7 +75,7 @@ describe('MidiLearnBar', () => {
     render(<ControlGroup section="color" param="hue" value={0} onChange={() => {}} />)
 
     expect(screen.getByText('CC9')).toBeInTheDocument()
-    fireEvent.contextMenu(screen.getByRole('slider', { name: 'Hue' }))
+    fireEvent.contextMenu(screen.getByRole('slider', { name: 'Color Shift' }))
     expect(screen.queryByText('CC9')).toBeNull()
   })
 })
