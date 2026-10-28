@@ -106,7 +106,7 @@ export const presets = [
       displacement: { amp: 60, freq: 2 },
       tiling: { type: 'p1', scale: 0.5 },
       color: { posterize: 256, hue: 0.85, sat: 0.55, light: 1.25 },
-      effects: { edgeDetect: 0, invert: 0, solarize: 0, shift: 0, bloom: 1.5, chromaticAberration: 0.2, noise: 0.03 },
+      effects: { edgeDetect: 0, invert: 0, solarize: 0, shift: 0, bloom: 0.5, chromaticAberration: 0.2, noise: 0.03 },
       generator: { type: 'plasma', param1: 25, param2: 30, param3: 50 }
     }
   },
