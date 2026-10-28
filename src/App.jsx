@@ -9,6 +9,7 @@ import { getEffectiveAuthoredSceneState, useStore } from './store/useStore'
 import { hasRenderableProjectionSurface } from './utils/projectionSources'
 import { isProjectionWindow } from './utils/windowMode'
 import { midiManager } from './core/MidiManager'
+import { createMediaAsset, isMediaFile } from './utils/mediaFiles'
 
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -130,6 +131,33 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Drop an image or video anywhere on the window to load it.
+  useEffect(() => {
+    if (projectionWindowMode) return undefined
+
+    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
+    const handleDragOver = (e) => {
+      if (hasFiles(e)) e.preventDefault()
+    }
+    const handleDrop = async (e) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      const file = Array.from(e.dataTransfer.files).find(isMediaFile)
+      if (!file) return
+      const asset = await createMediaAsset(file)
+      const store = useStore.getState()
+      store.resetForUpload()
+      store.addMediaAsset(asset)
+    }
+
+    window.addEventListener('dragover', handleDragOver)
+    window.addEventListener('drop', handleDrop)
+    return () => {
+      window.removeEventListener('dragover', handleDragOver)
+      window.removeEventListener('drop', handleDrop)
+    }
+  }, [])
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black text-white">
       <ErrorBoundary fallback={<div className="absolute inset-0 flex items-center justify-center text-red-500 font-mono text-xs">Canvas Error - Recovering...</div>}>
@@ -147,7 +175,7 @@ function App() {
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="bg-black/60 border border-white/10 rounded-xl px-6 py-4 text-center max-w-xs">
             <div className="text-sm font-semibold text-white mb-1">Start creating</div>
-            <div className="text-xs text-neutral-400">Upload an image/video or pick a generator to begin.</div>
+            <div className="text-xs text-neutral-400">Drop an image or video here, or pick a generator to begin.</div>
           </div>
         </div>
       )}

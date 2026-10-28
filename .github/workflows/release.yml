@@ -1,7 +1,8 @@
 name: Release
 
 # Push a tag like v1.3.0 to build installers and attach them to a draft
-# GitHub release (electron-builder also uploads latest*.yml for auto-update).
+# GitHub release named "Lumen Lab v1.3.0", with notes from CHANGELOG.md.
+# Merges to main don't release; only tags do.
 on:
   push:
     tags: ['v*']
@@ -16,15 +17,22 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm test -- --run
       - run: npm run build
-      - run: npx electron-builder --publish always
+      # Fails the release if CHANGELOG.md has no section for this version.
+      - run: node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > build/release-notes.md
+      # Pass the notes path explicitly: electron-builder only reads a release body
+      # from releaseNotesFile or a project-root release-notes.md.
+      - run: npx electron-builder --publish always "-c.releaseInfo.releaseName=Lumen Lab ${GITHUB_REF_NAME}" -c.releaseInfo.releaseNotesFile=build/release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

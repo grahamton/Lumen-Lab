@@ -8,6 +8,7 @@
   "license": "GPL-3.0",
   "type": "module",
   "main": "electron/main.js",
+  "desktopName": "lumen-lab.desktop",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -71,7 +72,13 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "category": "public.app-category.entertainment",
       "icon": "build/icon.png"
@@ -80,7 +87,8 @@
       "target": [
         "AppImage"
       ],
-      "category": "AudioVideo"
+      "category": "AudioVideo",
+      "syncDesktopName": true
     },
     "publish": [
       {

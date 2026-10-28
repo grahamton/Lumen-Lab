@@ -654,6 +654,50 @@ const DEFAULTS = {
   redoStack: [],
 }
 
+// Exported for tests; used as the persist middleware's merge().
+export function mergePersistedState(persistedState, currentState) {
+  if (!persistedState) return currentState // first launch: nothing saved yet
+  const incomingVersion = persistedState.schemaVersion
+  if (incomingVersion !== SCHEMA_VERSION) {
+    // The live look resets after a schema change, but what the user built
+    // (presets, snapshots, scenes, media, MIDI maps, projector profiles) is kept.
+    return normalizeProjectionSourcesInState({
+      ...currentState,
+      schemaVersion: SCHEMA_VERSION,
+      userPresets: persistedState?.userPresets ?? currentState.userPresets,
+      snapshots: persistedState?.snapshots ?? currentState.snapshots,
+      scenes: persistedState?.scenes ?? currentState.scenes,
+      mediaLibrary: persistedState?.mediaLibrary ?? currentState.mediaLibrary,
+      midi: { ...currentState.midi, mappings: persistedState?.midi?.mappings ?? currentState.midi.mappings },
+      projection: { ...currentState.projection, profiles: persistedState?.projection?.profiles ?? currentState.projection.profiles },
+      ui: { ...currentState.ui, resetNotice: 'Look reset after update; presets and library kept' },
+    })
+  }
+
+  const mergedState = {
+    ...currentState,
+    ...persistedState,
+    schemaVersion: SCHEMA_VERSION,
+    media: persistedState?.media || currentState.media,
+    mediaLibrary: persistedState?.mediaLibrary || currentState.mediaLibrary,
+    activeMediaId: persistedState?.activeMediaId ?? currentState.activeMediaId,
+    // Deep merge config objects to ensure new keys appear if schema changes
+    effects: { ...currentState.effects, ...(persistedState?.effects || {}) },
+    audio: { ...currentState.audio, ...(persistedState?.audio || {}) },
+    flux: { ...currentState.flux, ...(persistedState?.flux || {}) },
+    ui: { ...currentState.ui, ...(persistedState?.ui || {}) },
+    midi: { ...currentState.midi, ...(persistedState?.midi || {}) },
+    animation: { ...currentState.animation, ...(persistedState?.animation || {}) },
+    scenes: persistedState?.scenes || currentState.scenes,
+    symmetry: { ...currentState.symmetry, ...(persistedState?.symmetry || {}) },
+    generator: { ...currentState.generator, ...(persistedState?.generator || {}) },
+    color: { ...currentState.color, ...(persistedState?.color || {}) },
+    projection: { ...currentState.projection, ...(persistedState?.projection || {}) },
+  }
+
+  return normalizeProjectionSourcesInState(mergedState)
+}
+
 export const useStore = create(
   persist(
     (set, get) => ({
@@ -1854,40 +1898,7 @@ export const useStore = create(
         ui: { ...state.ui, exportRequest: null },
         midi: { ...state.midi, lastMsg: null },
       }),
-      merge: (persistedState, currentState) => {
-        const incomingVersion = persistedState?.schemaVersion
-        if (incomingVersion !== SCHEMA_VERSION) {
-          localStorage.removeItem('lumen-storage')
-          return {
-            ...currentState,
-            schemaVersion: SCHEMA_VERSION,
-            ui: { ...currentState.ui, resetNotice: 'State reset after update' }
-          }
-        }
-
-        const mergedState = {
-          ...currentState,
-          ...persistedState,
-          schemaVersion: SCHEMA_VERSION,
-          media: persistedState?.media || currentState.media,
-          mediaLibrary: persistedState?.mediaLibrary || currentState.mediaLibrary,
-          activeMediaId: persistedState?.activeMediaId ?? currentState.activeMediaId,
-          // Deep merge config objects to ensure new keys appear if schema changes
-          effects: { ...currentState.effects, ...(persistedState?.effects || {}) },
-          audio: { ...currentState.audio, ...(persistedState?.audio || {}) },
-          flux: { ...currentState.flux, ...(persistedState?.flux || {}) },
-          ui: { ...currentState.ui, ...(persistedState?.ui || {}) },
-          midi: { ...currentState.midi, ...(persistedState?.midi || {}) },
-          animation: { ...currentState.animation, ...(persistedState?.animation || {}) },
-          scenes: persistedState?.scenes || currentState.scenes,
-          symmetry: { ...currentState.symmetry, ...(persistedState?.symmetry || {}) },
-          generator: { ...currentState.generator, ...(persistedState?.generator || {}) },
-          color: { ...currentState.color, ...(persistedState?.color || {}) },
-          projection: { ...currentState.projection, ...(persistedState?.projection || {}) },
-        }
-
-        return normalizeProjectionSourcesInState(mergedState)
-      },
+      merge: mergePersistedState,
     }
   )
 )
