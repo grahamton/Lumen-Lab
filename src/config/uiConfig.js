@@ -33,7 +33,7 @@ export const CONTROLS = {
     amount: { min: 0, max: 1, step: 0.01, label: 'Intensity' },
   },
   animation: {
-    speed: { min: 20, max: 200, step: 1, label: 'Speed' },
+    bpm: { min: 20, max: 200, step: 1, label: 'Speed' },
   },
   audio: {
     sensitivity: { min: 0, max: 3, step: 0.05, label: 'Sensitivity' },

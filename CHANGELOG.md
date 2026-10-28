@@ -4,6 +4,14 @@ All notable changes to Lumen Lab are documented here.
 
 ## [Unreleased]
 
+### Added
+- MIDI LEARN toggle in the control panel: pick a slider, turn a knob to bind it; mapped sliders show their CC, right-click or × clears a mapping, Esc exits
+
+### Fixed
+- MOTION speed slider could not be MIDI-mapped (learned `animation.speed`, but the value lives at `animation.bpm`)
+- MIDI no longer drives integer params (slices, posterize) to fractional values
+- MIDI clock and active-sensing messages no longer reach the store
+
 ## [1.3.0] — 2026-10-26
 
 ### Changed

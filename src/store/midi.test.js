@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useStore } from './useStore'
+import { getEffectiveAuthoredSceneState, getMidiMappingLabel, useStore } from './useStore'
 
 describe('MIDI Integration', () => {
   beforeEach(() => {
@@ -61,5 +61,78 @@ describe('MIDI Integration', () => {
 
     store.clearMidiMapping(mappingKey)
     expect(useStore.getState().midi.mappings[mappingKey]).toBeUndefined()
+  })
+})
+
+describe('MIDI learn toggle and quantization', () => {
+  beforeEach(() => {
+    useStore.getState().resetAll()
+  })
+
+  it('setMidiLearn toggles learn mode and clears the pending target on exit', () => {
+    const store = useStore.getState()
+    store.setMidiLearn(true)
+    store.setUi('midiLearnId', 'color.hue')
+    expect(useStore.getState().ui.midiLearnActive).toBe(true)
+
+    useStore.getState().setMidiLearn(false)
+    expect(useStore.getState().ui.midiLearnActive).toBe(false)
+    expect(useStore.getState().ui.midiLearnId).toBeNull()
+
+    // With learn off, incoming messages never create mappings.
+    useStore.getState().setUi('midiLearnId', 'color.hue')
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 5, value: 0.5 })
+    expect(useStore.getState().midi.mappings).toEqual({})
+  })
+
+  it('re-learning a param replaces its previous mapping', () => {
+    const store = useStore.getState()
+    store.setMidiLearn(true)
+    store.setUi('midiLearnId', 'effects.bloom')
+    store.setMidi('lastMsg', { type: 'cc', channel: 1, note: 1, value: 0 })
+    useStore.getState().setUi('midiLearnId', 'effects.bloom')
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 2, note: 7, value: 0 })
+
+    expect(useStore.getState().midi.mappings).toEqual({ '2-cc-7': 'effects.bloom' })
+    expect(getMidiMappingLabel(useStore.getState().midi.mappings, 'effects.bloom')).toBe('CC7/2')
+  })
+
+  it('clearMidiMappingsFor removes every mapping of a param', () => {
+    const store = useStore.getState()
+    store.setMidiMapping('1-cc-1', 'color.hue')
+    store.setMidiMapping('1-noteOn-60', 'color.hue')
+    store.setMidiMapping('1-cc-2', 'color.sat')
+
+    useStore.getState().clearMidiMappingsFor('color.hue')
+    expect(useStore.getState().midi.mappings).toEqual({ '1-cc-2': 'color.sat' })
+  })
+
+  it('quantizes integer params to their step', () => {
+    const store = useStore.getState()
+    store.setMidiMapping('1-cc-40', 'symmetry.slices')
+    store.setMidiMapping('1-cc-41', 'color.posterize')
+
+    // slices: 2..32 → 2 + 30 * 0.37 = 13.1
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 40, value: 0.37 })
+    expect(getEffectiveAuthoredSceneState(useStore.getState()).symmetry.slices).toBe(13)
+
+    // posterize: 2..32 → 2 + 30 * 0.33 = 11.9
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 41, value: 0.33 })
+    expect(useStore.getState().color.posterize).toBe(12)
+
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 41, value: 1 })
+    expect(useStore.getState().color.posterize).toBe(32)
+  })
+
+  it('leaves fractional params smooth', () => {
+    useStore.getState().setMidiMapping('1-cc-42', 'effects.chromaticAberration')
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 42, value: 0.333 })
+    expect(useStore.getState().effects.chromaticAberration).toBeCloseTo(0.333)
+  })
+
+  it('drives the motion speed slider (animation.bpm)', () => {
+    useStore.getState().setMidiMapping('1-cc-43', 'animation.bpm')
+    useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 43, value: 0.5 })
+    expect(useStore.getState().animation.bpm).toBe(110)
   })
 })

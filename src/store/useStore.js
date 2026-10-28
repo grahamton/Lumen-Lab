@@ -443,6 +443,16 @@ function clearSceneEditorSession() {
   return { ...DEFAULTS.sceneEditor }
 }
 
+// Short label for the MIDI control mapped to a param ("CC20", "N60"), or null.
+// Mapping keys are `${channel}-${type}-${note}`; channel 1 is left implicit.
+export function getMidiMappingLabel(mappings, paramPath) {
+  const key = Object.keys(mappings || {}).find((k) => mappings[k] === paramPath)
+  if (!key) return null
+  const [channel, type, note] = key.split('-')
+  const label = `${type === 'cc' ? 'CC' : 'N'}${note}`
+  return channel === '1' ? label : `${label}/${channel}`
+}
+
 export function getActiveSceneEditorSession(state) {
   return state?.sceneEditor || { ...DEFAULTS.sceneEditor }
 }
@@ -739,11 +749,12 @@ export const useStore = create(
             // Mapping Key: `${channel}-${type}-${note}`
             const mapKey = `${channel}-${type}-${note}`
 
-            // Update Mappings
-            newState.midi.mappings = {
-              ...state.midi.mappings,
-              [mapKey]: state.ui.midiLearnId
-            }
+            // Update Mappings. A param keeps a single mapping, so re-learning
+            // replaces whatever it was mapped to before.
+            const mappings = Object.fromEntries(
+              Object.entries(state.midi.mappings).filter(([, path]) => path !== state.ui.midiLearnId)
+            )
+            newState.midi.mappings = { ...mappings, [mapKey]: state.ui.midiLearnId }
 
             // Clear learn ID so we don't map same param twice immediately
             // User must click another param to map another
@@ -781,14 +792,15 @@ export const useStore = create(
           let val = normalValue
 
           if (configParam) {
-            const { min, max } = configParam
+            const { min, max, step } = configParam
             // Lerp
             val = min + (max - min) * normalValue
 
-            // Optional: Step quantization if needed, but smooth is usually better for MIDI
-            // if (configParam.step) {
-            //   val = Math.round(val / configParam.step) * configParam.step
-            // }
+            // Integer params (slices, posterize levels, ...) must land on whole
+            // steps; fractional ones stay smooth, which reads better from MIDI.
+            if (Number.isInteger(step)) {
+              val = Math.min(max, min + Math.round((val - min) / step) * step)
+            }
           } else {
             // Fallback / heuristic if not in CONTROLS
             // E.g. opacity is usually 0-1, rotation 0-360?
@@ -830,6 +842,19 @@ export const useStore = create(
         delete newMappings[midiId]
         return { midi: { ...state.midi, mappings: newMappings } }
       }),
+
+      clearMidiMappingsFor: (paramPath) => set((state) => ({
+        midi: {
+          ...state.midi,
+          mappings: Object.fromEntries(
+            Object.entries(state.midi.mappings).filter(([, path]) => path !== paramPath)
+          ),
+        },
+      })),
+
+      setMidiLearn: (active) => set((state) => ({
+        ui: { ...state.ui, midiLearnActive: active, midiLearnId: active ? state.ui.midiLearnId : null },
+      })),
 
       setUi: (key, value) => set((state) => ({
         ui: { ...state.ui, [key]: value }
@@ -1851,8 +1876,9 @@ export const useStore = create(
         audio: { ...state.audio, meters: DEFAULTS.audio.meters },
         flux: state.flux,
         animation: state.animation,
-        ui: { ...state.ui, exportRequest: null },
-        midi: { ...state.midi, lastMsg: null },
+        ui: { ...state.ui, exportRequest: null, midiLearnActive: false, midiLearnId: null },
+        // Devices are rescanned on launch; only the mappings are worth keeping.
+        midi: { mappings: state.midi.mappings },
       }),
       merge: (persistedState, currentState) => {
         const incomingVersion = persistedState?.schemaVersion
