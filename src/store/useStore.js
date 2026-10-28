@@ -99,7 +99,8 @@ function applySceneStateSnapshot(state, snap) {
     warp: lock ? state.warp : { ...snap.warp },
     displacement: { ...snap.displacement },
     tiling: lock ? state.tiling : { ...snap.tiling },
-    color: { ...snap.color },
+    // Presets and older saved snapshots may omit grading fields; fall back to neutral defaults
+    color: { ...DEFAULTS.color, ...snap.color },
     effects: { ...snap.effects },
     generator: { ...snap.generator },
   }

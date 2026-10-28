@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { act } from '@testing-library/react'
 import { useStore } from './useStore'
+import { presets } from '../presets'
 
 describe('Zustand Store', () => {
   // Reset store before each test to ensure isolation
@@ -1297,5 +1298,21 @@ describe('Zustand Store', () => {
     act(() => { store.undo() })
     act(() => { store.pushUndo() })
     expect(useStore.getState().redoStack.length).toBe(0)
+  })
+
+  it('should load built-in presets with numeric colour grading', () => {
+    for (const preset of presets) {
+      act(() => { useStore.getState().loadSnapshot(preset.state) })
+      const { color } = useStore.getState()
+      for (const key of ['hue', 'sat', 'light']) {
+        expect(Number.isFinite(color[key]), `${preset.name} color.${key}`).toBe(true)
+      }
+      expect(color.posterize).toBe(preset.state.color.posterize)
+    }
+  })
+
+  it('should default missing colour grading to neutral when loading a snapshot', () => {
+    act(() => { useStore.getState().loadSnapshot(presets[0].state) })
+    expect(useStore.getState().color).toMatchObject({ hue: 0, sat: 1, light: 1 })
   })
 })

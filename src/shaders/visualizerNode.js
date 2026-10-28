@@ -142,71 +142,77 @@ export function createVisualizerMaterial() {
   } = uniforms
 
   // --- GENERATORS ---
+  // setLayout() functions must not read uniforms from their closure: three caches each
+  // one's generated code per backend, so a second program built from this material (e.g.
+  // when bloom and chromatic aberration are both on) would reuse the body without
+  // declaring those uniforms. Uniforms are passed in as parameters instead.
 
-  const fibonacciSpiral = Fn(([p]) => {
+  const GEN_INPUTS = [{ name: 'p', type: 'vec2' }, { name: 'params', type: 'vec3' }, { name: 't', type: 'float' }]
+
+  const fibonacciSpiral = Fn(([p, params, t]) => {
     const center = p.sub(0.5)
-    const r = length(center).mul(uGenParams.y)
-    const theta = atan(center.y, center.x).add(uGenTime.mul(0.1))
-    const spiral = sin(log(r.add(0.0001)).mul(10.0).add(theta.mul(uGenParams.x)))
+    const r = length(center).mul(params.y)
+    const theta = atan(center.y, center.x).add(t.mul(0.1))
+    const spiral = sin(log(r.add(0.0001)).mul(10.0).add(theta.mul(params.x)))
     return vec3(smoothstep(-0.2, 0.2, spiral))
-  }).setLayout({ name: 'llFibonacci', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  }).setLayout({ name: 'llFibonacci', type: 'vec3', inputs: GEN_INPUTS })
 
-  const voronoi = Fn(([p]) => {
-    const st = p.mul(uGenParams.x).mul(0.1).add(1.0)
+  const voronoi = Fn(([p, params, t]) => {
+    const st = p.mul(params.x).mul(0.1).add(1.0)
     const iSt = floor(st)
     const fSt = fract(st)
     const minDist = float(1.0).toVar()
     for (let y = -1; y <= 1; y++) {
       for (let x = -1; x <= 1; x++) {
         const neighbor = vec2(x, y)
-        const point = sin(uGenTime.mul(0.5).add(vec2(random(iSt.add(neighbor))).mul(6.2831))).mul(0.5).add(0.5)
+        const point = sin(t.mul(0.5).add(vec2(random(iSt.add(neighbor))).mul(6.2831))).mul(0.5).add(0.5)
         minDist.assign(min(minDist, length(neighbor.add(point).sub(fSt))))
       }
     }
-    return vec3(smoothstep(0.0, uGenParams.y.mul(0.01).add(0.1), minDist))
-  }).setLayout({ name: 'llVoronoi', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+    return vec3(smoothstep(0.0, params.y.mul(0.01).add(0.1), minDist))
+  }).setLayout({ name: 'llVoronoi', type: 'vec3', inputs: GEN_INPUTS })
 
-  const basicGrid = Fn(([p]) => {
-    const st = p.mul(uGenParams.x).mul(0.2)
-    const thick = uGenParams.y.mul(0.005)
-    const soft = uGenParams.z.mul(0.002).add(0.001)
+  const basicGrid = Fn(([p, params]) => {
+    const st = p.mul(params.x).mul(0.2)
+    const thick = params.y.mul(0.005)
+    const soft = params.z.mul(0.002).add(0.001)
     const grid = abs(fract(st.sub(0.5)).sub(0.5))
     const lineX = smoothstep(thick.sub(soft), thick.add(soft), grid.x)
     const lineY = smoothstep(thick.sub(soft), thick.add(soft), grid.y)
     return vec3(float(1.0).sub(min(lineX, lineY)))
-  }).setLayout({ name: 'llGrid', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  }).setLayout({ name: 'llGrid', type: 'vec3', inputs: GEN_INPUTS })
 
-  const liquid = Fn(([p]) => {
-    const st = p.mul(uGenParams.x).mul(0.05)
-    const n = snoise(st.add(uGenTime.mul(uGenParams.y).mul(0.002)))
-      .add(snoise(st.mul(2.0).sub(uGenTime.mul(0.2))).mul(0.5))
+  const liquid = Fn(([p, params, t]) => {
+    const st = p.mul(params.x).mul(0.05)
+    const n = snoise(st.add(t.mul(params.y).mul(0.002)))
+      .add(snoise(st.mul(2.0).sub(t.mul(0.2))).mul(0.5))
     const val = smoothstep(0.2, 0.8, n.add(0.5))
     return vec3(
-      val.mul(sin(uGenTime.add(n))),
-      val.mul(cos(uGenTime.add(n))),
+      val.mul(sin(t.add(n))),
+      val.mul(cos(t.add(n))),
       val,
     )
-  }).setLayout({ name: 'llLiquid', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  }).setLayout({ name: 'llLiquid', type: 'vec3', inputs: GEN_INPUTS })
 
-  const plasma = Fn(([p]) => {
-    const st = p.mul(uGenParams.x).mul(0.1)
-    const c = st.add(vec2(sin(uGenTime), cos(uGenTime)))
-    const v = sin(st.x.add(uGenTime.mul(0.5)))
-      .add(sin(st.y.add(uGenTime).div(2.0)))
-      .add(sin(st.x.add(st.y).add(uGenTime).div(2.0)))
-      .add(sin(length(c).mul(uGenParams.y.mul(0.1))))
+  const plasma = Fn(([p, params, t]) => {
+    const st = p.mul(params.x).mul(0.1)
+    const c = st.add(vec2(sin(t), cos(t)))
+    const v = sin(st.x.add(t.mul(0.5)))
+      .add(sin(st.y.add(t).div(2.0)))
+      .add(sin(st.x.add(st.y).add(t).div(2.0)))
+      .add(sin(length(c).mul(params.y.mul(0.1))))
       .div(4.0)
-    const phase = v.mul(PI).add(uGenTime)
+    const phase = v.mul(PI).add(t)
     return vec3(
       sin(phase).mul(0.5).add(0.5),
       sin(phase.add(2.0)).mul(0.5).add(0.5),
       sin(phase.add(4.0)).mul(0.5).add(0.5),
     )
-  }).setLayout({ name: 'llPlasma', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+  }).setLayout({ name: 'llPlasma', type: 'vec3', inputs: GEN_INPUTS })
 
-  const fractalNoise = Fn(([p]) => {
-    const st = p.mul(uGenParams.x).mul(0.05)
-    const speed = uGenTime.mul(uGenParams.z.mul(0.1))
+  const fractalNoise = Fn(([p, params, t]) => {
+    const st = p.mul(params.x).mul(0.05)
+    const speed = t.mul(params.z.mul(0.1))
     const q = vec2(fbm(st), fbm(st.add(vec2(1.0))))
     const r = vec2(
       fbm(st.add(q).add(vec2(1.7, 9.2)).add(speed.mul(0.15))),
@@ -217,28 +223,33 @@ export function createVisualizerMaterial() {
     const base = mix(vec3(0.101961, 0.619608, 0.666667), vec3(0.666667, 0.666667, 0.498039), clamp(f.mul(f).mul(4.0), 0.0, 1.0))
     const deep = mix(base, vec3(0.0, 0.0, 0.164706), clamp(length(q), 0.0, 1.0))
     const color = mix(deep, vec3(0.666667, 1.0, 1.0), clamp(abs(r.x), 0.0, 1.0))
-    return color.mul(uGenParams.y.mul(0.02).add(0.5))
-  }).setLayout({ name: 'llFractal', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }] })
+    return color.mul(params.y.mul(0.02).add(0.5))
+  }).setLayout({ name: 'llFractal', type: 'vec3', inputs: GEN_INPUTS })
 
   // --- CONTENT FETCHER ---
 
-  const getContent = Fn(([p]) => {
+  const generate = Fn(([p, type, params, t]) => {
+    const gen = vec3(0.0).toVar()
+    If(type.lessThan(1.5), () => { gen.assign(fibonacciSpiral(p, params, t)) })
+      .ElseIf(type.lessThan(2.5), () => { gen.assign(voronoi(p, params, t)) })
+      .ElseIf(type.lessThan(3.5), () => { gen.assign(basicGrid(p, params, t)) })
+      .ElseIf(type.lessThan(4.5), () => { gen.assign(liquid(p, params, t)) })
+      .ElseIf(type.lessThan(5.5), () => { gen.assign(plasma(p, params, t)) })
+      .Else(() => { gen.assign(fractalNoise(p, params, t)) })
+    return gen
+  }).setLayout({ name: 'llGenerate', type: 'vec3', inputs: [{ name: 'p', type: 'vec2' }, { name: 'type', type: 'float' }, { name: 'params', type: 'vec3' }, { name: 't', type: 'float' }] })
+
+  // Inlined (no layout) so the uniform reads and texture sample stay in the caller's graph.
+  const getContent = (p) => {
     const result = vec4(0.0).toVar()
     If(uGenType.greaterThan(0.5), () => {
-      const gen = vec3(0.0).toVar()
-      If(uGenType.lessThan(1.5), () => { gen.assign(fibonacciSpiral(p)) })
-        .ElseIf(uGenType.lessThan(2.5), () => { gen.assign(voronoi(p)) })
-        .ElseIf(uGenType.lessThan(3.5), () => { gen.assign(basicGrid(p)) })
-        .ElseIf(uGenType.lessThan(4.5), () => { gen.assign(liquid(p)) })
-        .ElseIf(uGenType.lessThan(5.5), () => { gen.assign(plasma(p)) })
-        .Else(() => { gen.assign(fractalNoise(p)) })
-      result.assign(vec4(gen, 1.0))
+      result.assign(vec4(generate(p, uGenType, uGenParams, uGenTime), 1.0))
     }).ElseIf(
       p.x.greaterThanEqual(0.0).and(p.x.lessThanEqual(1.0)).and(p.y.greaterThanEqual(0.0)).and(p.y.lessThanEqual(1.0)),
       () => { result.assign(uTexture.sample(p)) },
     )
     return result
-  }).setLayout({ name: 'llGetContent', type: 'vec4', inputs: [{ name: 'p', type: 'vec2' }] })
+  }
 
   const lumaAt = (coord, offset) => dot(getContent(coord.add(offset)).rgb, LUMA)
 
