@@ -2,6 +2,7 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { act } from 'react'
 import { SectionOutput } from './SectionOutput'
+import { AuthoringBanner } from './AuthoringBanner'
 import { useStore } from '../../store/useStore'
 
 describe('SectionOutput', () => {
@@ -42,7 +43,7 @@ describe('SectionOutput', () => {
   it('captures a scene when assigning a built-in source from the source select', () => {
     render(<SectionOutput />)
 
-    const sourceSelect = screen.getByDisplayValue('LIVE OUTPUT')
+    const sourceSelect = screen.getByDisplayValue('MAIN VISUAL')
     fireEvent.change(sourceSelect, { target: { value: 'builtin:0' } })
 
     const state = useStore.getState()
@@ -63,10 +64,10 @@ describe('SectionOutput', () => {
   it('toggles surface visibility from the selected surface controls', () => {
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'HIDE SURFACE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'HIDE SHAPE' }))
     expect(useStore.getState().projection.surfaces[0].visible).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'SHOW SURFACE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'SHOW SHAPE' }))
     expect(useStore.getState().projection.surfaces[0].visible).toBe(true)
   })
 
@@ -118,7 +119,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'RESET MISSING TO LIVE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'RESET MISSING TO MAIN' }))
 
     const state = useStore.getState()
     expect(state.projection.surfaces[0].sourceMode).toBe('live')
@@ -162,7 +163,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'MAKE ALL LIVE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ALL FOLLOW MAIN VISUAL' }))
 
     expect(useStore.getState().projection.surfaces.every((surface) => (
       surface.sourceMode === 'live' && surface.sourceId === 'live'
@@ -206,8 +207,8 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    expect(screen.getByText(/Stage is mixed: 1 live, 1 independent\./i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'MAKE ALL LIVE' })).toBeInTheDocument()
+    expect(screen.getByText(/Mixed: 1 shape follows the main visual, 1 has its own look\./i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ALL FOLLOW MAIN VISUAL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'MAKE VISIBLE LIVE' })).not.toBeInTheDocument()
   })
 
@@ -248,8 +249,8 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    expect(screen.getAllByText(/No visible surface is following/i)).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'MAKE ALL LIVE' })).toBeInTheDocument()
+    expect(screen.getByText(/2 shapes have their own look, so left-panel changes won’t show on stage\./i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ALL FOLLOW MAIN VISUAL' })).toBeInTheDocument()
   })
 
   it('shows follow-live controls and independent copy for a selected non-live surface', () => {
@@ -276,10 +277,8 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    expect(screen.getAllByText('Independent from live controls').length).toBeGreaterThan(0)
-    expect(screen.getByText(/This surface is independent from live controls until returned to `LIVE OUTPUT`\./i)).toBeInTheDocument()
-    expect(screen.getByText(/Media and preset choices here create reusable scenes, then assign that scene to the surface\./i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'FOLLOW LIVE OUTPUT' })).toBeInTheDocument()
+    expect(screen.getByText(/Has its own look\. Left-panel changes don’t affect it\./i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'FOLLOW MAIN VISUAL' })).toBeInTheDocument()
   })
 
   it('shows the hidden-surface message and toggles back cleanly', () => {
@@ -306,10 +305,10 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    expect(document.body.textContent).toContain('This surface is hidden and will not render on stage until shown again.')
-    fireEvent.click(screen.getByRole('button', { name: 'SHOW SURFACE' }))
+    expect(document.body.textContent).toContain('This shape is hidden, so it won’t show on stage.')
+    fireEvent.click(screen.getByRole('button', { name: 'SHOW SHAPE' }))
     expect(useStore.getState().projection.surfaces[0].visible).toBe(true)
-    expect(document.body.textContent).not.toContain('This surface is hidden and will not render on stage until shown again.')
+    expect(document.body.textContent).not.toContain('This shape is hidden, so it won’t show on stage.')
   })
 
   it('rehomes the output window when the selected display changes while it is open', async () => {
@@ -398,7 +397,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByText('LOAD LIVE'))
+    fireEvent.click(screen.getByText('SHOW ON MAIN'))
 
     expect(useStore.getState().generator.type).toBe('plasma')
   })
@@ -443,15 +442,15 @@ describe('SectionOutput', () => {
       })
     })
 
-    render(<SectionOutput />)
+    render(<><SectionOutput /><AuthoringBanner /></>)
 
-    fireEvent.click(screen.getByText('AUTHOR'))
+    fireEvent.click(screen.getByText('EDIT THIS LOOK'))
     expect(useStore.getState().sceneEditor.activeSceneId).toBe('scene-1')
     expect(useStore.getState().generator.type).toBe('voronoi')
     expect(useStore.getState().sceneEditor.mode).toBe('library')
     expect(useStore.getState().sceneEditor.draftState.generator.type).toBe('plasma')
-    expect(screen.getByText(/Control changes are editing this scene draft without overwriting the shared live state\./i)).toBeInTheDocument()
-    expect(screen.getByText(/Authoring from the scene library\./i)).toBeInTheDocument()
+    expect(screen.getByText('‘Scene 1’')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'EDITING' })).toBeInTheDocument()
 
     act(() => {
       useStore.getState().setGenerator('type', 'grid')
@@ -461,8 +460,7 @@ describe('SectionOutput', () => {
     expect(useStore.getState().sceneEditor.draftState.generator.type).toBe('grid')
     expect(useStore.getState().generator.type).toBe('voronoi')
     expect(screen.getByText('GENERATOR · GRID')).toBeInTheDocument()
-    expect(screen.getByText(/Autosave is active for this scene draft\./i)).toBeInTheDocument()
-    fireEvent.click(screen.getByText('RESTORE LIVE'))
+    fireEvent.click(screen.getByRole('button', { name: 'DONE EDITING' }))
 
     expect(useStore.getState().sceneEditor.activeSceneId).toBeNull()
     expect(useStore.getState().generator.type).toBe('voronoi')
@@ -555,7 +553,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'FORK + AUTHOR' }))
+    fireEvent.click(screen.getByRole('button', { name: 'COPY & EDIT' }))
 
     const state = useStore.getState()
     expect(state.scenes).toHaveLength(2)
@@ -600,7 +598,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'CAPTURE TO SCENE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE AS LOOK' }))
 
     const state = useStore.getState()
     expect(state.scenes).toHaveLength(1)
@@ -647,7 +645,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'CREATE + AUTHOR SCENE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'NEW LOOK & EDIT' }))
 
     const state = useStore.getState()
     expect(state.scenes).toHaveLength(1)
@@ -669,7 +667,7 @@ describe('SectionOutput', () => {
 
     render(<SectionOutput />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'ASSIGN' }))
+    fireEvent.click(screen.getByRole('button', { name: 'USE ON SHAPE' }))
 
     const state = useStore.getState()
     expect(state.scenes).toHaveLength(1)
@@ -727,5 +725,98 @@ describe('SectionOutput', () => {
     render(<SectionOutput />)
 
     expect(screen.getByText('ORIGIN · BUILT-IN · PORTAL')).toBeInTheDocument()
+  })
+
+  it('keeps the advanced mapped-shapes block collapsed until it is needed', () => {
+    act(() => {
+      useStore.setState({
+        projection: { ...useStore.getState().projection, surfaces: [], selectedSurfaceId: null },
+        scenes: [],
+      })
+    })
+
+    render(<SectionOutput />)
+
+    expect(screen.getByRole('button', { name: 'LINE UP PROJECTOR' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '+ NEW SHAPE' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /ADVANCED: MAPPED SHAPES/ }))
+    fireEvent.click(screen.getByRole('button', { name: '+ NEW SHAPE' }))
+    expect(useStore.getState().projection.surfaces).toHaveLength(1)
+  })
+
+  it('starts line-up from the projector block', () => {
+    act(() => {
+      useStore.setState({ projection: { ...useStore.getState().projection, enabled: false, calibrating: false } })
+    })
+    render(<SectionOutput />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'LINE UP PROJECTOR' }))
+    expect(useStore.getState().projection.enabled).toBe(true)
+    expect(useStore.getState().projection.calibrating).toBe(true)
+  })
+
+  it('maps alignment grid labels onto the stored pattern modes', () => {
+    render(<SectionOutput />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'ON TOP' }))
+    expect(useStore.getState().projection.patternMode).toBe('overlay')
+    fireEvent.click(screen.getByRole('button', { name: 'GRID ONLY' }))
+    expect(useStore.getState().projection.patternMode).toBe('replace')
+  })
+
+  it('needs a second click before deleting a shape', () => {
+    render(<SectionOutput />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'DELETE' }))
+    expect(useStore.getState().projection.surfaces).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'SURE?' }))
+    expect(useStore.getState().projection.surfaces).toHaveLength(0)
+  })
+
+  it('explains why SAVE ALIGNMENT is disabled', () => {
+    act(() => {
+      useStore.setState({ projection: { ...useStore.getState().projection, points: null } })
+    })
+    render(<SectionOutput />)
+
+    expect(screen.getByRole('button', { name: 'SAVE ALIGNMENT' })).toBeDisabled()
+    expect(screen.getByText('Move a corner first.')).toBeInTheDocument()
+  })
+
+  it('hides secondary look actions behind the more menu and confirms destructive ones', () => {
+    act(() => {
+      useStore.setState({
+        scenes: [{
+          id: 'scene-1',
+          name: 'Scene 1',
+          state: {
+            transforms: { x: 0, y: 0, scale: 1, rotation: 0 },
+            symmetry: { enabled: true, type: 'radial', slices: 6, offset: 0 },
+            warp: { type: 'none' },
+            displacement: { amp: 0, freq: 10 },
+            tiling: { type: 'none', scale: 1 },
+            color: { posterize: 32, hue: 0, sat: 1, light: 1 },
+            effects: { edgeDetect: 0, invert: 0, solarize: 0, shift: 0, bloom: 0, chromaticAberration: 0, noise: 0 },
+            generator: { type: 'plasma', param1: 50, param2: 50, param3: 50, isAnimated: true },
+            media: null,
+            activeMediaId: null,
+          },
+        }],
+      })
+    })
+    render(<SectionOutput />)
+
+    expect(screen.queryByRole('button', { name: 'OVERWRITE WITH CURRENT' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'OVERWRITE WITH CURRENT' }))
+    expect(useStore.getState().scenes[0].state.generator.type).toBe('plasma')
+    fireEvent.click(screen.getByRole('button', { name: 'SURE?' }))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'DELETE' }).at(-1))
+    fireEvent.click(screen.getByRole('button', { name: 'SURE?' }))
+    expect(useStore.getState().scenes).toHaveLength(0)
   })
 })

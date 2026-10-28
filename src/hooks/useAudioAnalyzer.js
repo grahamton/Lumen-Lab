@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
+import { useStore } from '../store/useStore'
 
 export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
   const audioContextRef = useRef(null)
@@ -96,7 +97,17 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
         }
 
         sourceNode.connect(analyser)
-        // Note: Do NOT connect to destination (speakers) for Mic, or feedback loop!
+        // A file should be heard as well as analysed. Never route the mic to the
+        // speakers: that's a feedback loop.
+        if (source === 'file') analyser.connect(ctx.destination)
+
+        // Restored sessions can create the context before any user gesture, which
+        // leaves it suspended (silent analyser); resume on the first interaction.
+        if (ctx.state === 'suspended') {
+          const resume = () => ctx.state === 'suspended' && ctx.resume().catch(() => {})
+          window.addEventListener('pointerdown', resume, { once: true })
+          window.addEventListener('keydown', resume, { once: true })
+        }
 
         audioContextRef.current = ctx
         analyserRef.current = analyser
@@ -107,7 +118,12 @@ export function useAudioAnalyzer(enabled, source = 'mic', fileUrl = null) {
       } catch (err) {
         ctx?.close()
         console.error("Audio Init Error:", err)
-        alert("Failed to initialize audio. Check permissions?")
+        // Turn the toggle back off so the UI matches reality, and say why.
+        const store = useStore.getState()
+        store.setAudio('enabled', false)
+        store.notify(err?.name === 'NotAllowedError'
+          ? 'Microphone access was blocked · allow it to react to music'
+          : 'Could not start audio input')
       }
     }
 

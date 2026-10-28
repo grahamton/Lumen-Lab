@@ -437,7 +437,7 @@ export function createVisualizerMaterial() {
         color.assign(mix(color, sol, uEffects.z.mul(0.01)))
       })
 
-      If(uPosterize.lessThan(255.0), () => {
+      If(uPosterize.lessThan(32.5), () => {
         color.assign(floor(color.mul(uPosterize)).div(uPosterize))
       })
 

@@ -42,3 +42,16 @@ body {
     background: rgba(255, 255, 255, 0.2);
   }
 }
+
+@keyframes lumen-toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+.lumen-toast {
+  animation: lumen-toast-in 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lumen-toast { animation: none; }
+}

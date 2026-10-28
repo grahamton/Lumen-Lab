@@ -38,7 +38,8 @@ describe('MIDI Integration', () => {
     store.setMidiMapping(mappingKey, 'generator.param1')
 
     // 2. Initial Value
-    expect(useStore.getState().generator.param1).toBe(50) // Default
+    store.setGenerator('param1', 50)
+    expect(useStore.getState().generator.param1).toBe(50)
 
     // 3. Send MIDI Message (value 1.0 => Max 100)
     store.setMidi('lastMsg', { type: 'cc', channel: 1, note: 20, value: 1.0 })
@@ -116,12 +117,12 @@ describe('MIDI learn toggle and quantization', () => {
     useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 40, value: 0.37 })
     expect(getEffectiveAuthoredSceneState(useStore.getState()).symmetry.slices).toBe(13)
 
-    // posterize: 2..32 → 2 + 30 * 0.33 = 11.9
+    // posterize: 2..32 → 2 + 31 * 0.33 = 12.2
     useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 41, value: 0.33 })
     expect(useStore.getState().color.posterize).toBe(12)
 
     useStore.getState().setMidi('lastMsg', { type: 'cc', channel: 1, note: 41, value: 1 })
-    expect(useStore.getState().color.posterize).toBe(32)
+    expect(useStore.getState().color.posterize).toBe(33)
   })
 
   it('leaves fractional params smooth', () => {

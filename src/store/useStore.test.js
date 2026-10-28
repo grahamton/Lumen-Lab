@@ -98,9 +98,13 @@ describe('Zustand Store', () => {
       resetAll()
     })
 
-    // Verify Default State
+    // Back to the starter look (a moving preset), with audio off
     state = useStore.getState()
-    expect(state.transforms.scale).toBe(1)
+    const starter = presets.find((preset) => preset.name === 'Kaleido Bloom')
+    expect(state.transforms.scale).toBe(starter.state.transforms.scale)
+    expect(state.generator.type).toBe(starter.state.generator.type)
+    expect(state.color.hue).toBe(0)
+    expect(state.flux.enabled).toBe(true)
     expect(state.audio.enabled).toBe(false)
   })
 
@@ -1337,8 +1341,10 @@ describe('mergePersistedState', () => {
     expect(merged.transforms).toEqual(current.transforms)
   })
 
-  it('returns current state untouched on first launch', () => {
+  it('starts a first launch on the moving starter look, keeping everything else', () => {
     const current = useStore.getState()
-    expect(mergePersistedState(undefined, current)).toBe(current)
+    const merged = mergePersistedState(undefined, current)
+    expect(merged.flux.enabled).toBe(true)
+    expect(merged.userPresets).toEqual(current.userPresets)
   })
 })

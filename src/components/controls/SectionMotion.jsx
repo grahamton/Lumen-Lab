@@ -1,23 +1,8 @@
-import React from 'react'
+import React, { useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/shallow'
 import { ControlGroup } from './ControlGroup'
-
-function Toggle({ label, isOn, onToggle }) {
-  return (
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-[9px] tracking-widest text-neutral-500">{label}</span>
-      <button
-        onClick={onToggle}
-        role="switch"
-        aria-checked={isOn}
-        className={`w-7 h-3.5 rounded-full relative transition-colors ${isOn ? 'bg-cyan-950 border border-cyan-400' : 'bg-neutral-700'}`}
-      >
-        <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-transform ${isOn ? 'translate-x-3.5 bg-cyan-400' : 'translate-x-0.5 bg-neutral-500'}`} />
-      </button>
-    </div>
-  )
-}
+import { Toggle } from './Toggle'
 
 export const SectionMotion = React.memo(function SectionMotion({ onInteract }) {
   // Fine-grained selectors: subscribe to individual leaf values so this component
@@ -35,35 +20,29 @@ export const SectionMotion = React.memo(function SectionMotion({ onInteract }) {
   )
   const isPlaying = !globalPause
 
-  function wrap(fn) {
-    return (...args) => { onInteract?.(); fn(...args) }
-  }
+  const toggleAnimate = useCallback(() => {
+    onInteract?.()
+    setUi('globalPause', isPlaying)
+  }, [onInteract, setUi, isPlaying])
+
+  const toggleWander = useCallback(() => {
+    onInteract?.()
+    setFlux('enabled', !fluxEnabled)
+  }, [onInteract, setFlux, fluxEnabled])
 
   return (
     <div>
-      <Toggle
-        label="ANIMATE"
-        isOn={isPlaying}
-        onToggle={wrap(() => setUi('globalPause', isPlaying))}
-      />
+      <Toggle label="ANIMATE" help="animation.enabled" isOn={isPlaying} onToggle={toggleAnimate} />
       <ControlGroup
         section="animation"
         param="bpm"
         value={animationBpm}
-        onChange={wrap((v) => setAnimation('bpm', v))}
+        set={setAnimation}
+        onInteract={onInteract}
       />
-      <Toggle
-        label="DRIFT"
-        isOn={fluxEnabled}
-        onToggle={wrap(() => setFlux('enabled', !fluxEnabled))}
-      />
+      <Toggle label="WANDER" help="flux.enabled" isOn={fluxEnabled} onToggle={toggleWander} />
       {fluxEnabled && (
-        <ControlGroup
-          section="flux"
-          param="amount"
-          value={fluxAmount}
-          onChange={wrap((v) => setFlux('amount', v))}
-        />
+        <ControlGroup section="flux" param="amount" value={fluxAmount} set={setFlux} onInteract={onInteract} />
       )}
     </div>
   )
