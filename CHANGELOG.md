@@ -6,11 +6,15 @@ All notable changes to Lumen Lab are documented here.
 
 ### Added
 - Drop an image or video anywhere on the window to load it
+- MIDI LEARN toggle in the control panel: pick a slider, turn a knob to bind it; mapped sliders show their CC, right-click or × clears a mapping, Esc exits
 
 ### Fixed
 - A schema change on update no longer wipes presets, snapshots, scenes, the media library, MIDI mappings, or projector profiles; only the live look resets
 - Video decoders are released when switching away from a video
 - Hard Reset asks for confirmation before erasing saved data
+- MOTION speed slider could not be MIDI-mapped (learned `animation.speed`, but the value lives at `animation.bpm`)
+- MIDI no longer drives integer params (slices, posterize) to fractional values
+- MIDI clock and active-sensing messages no longer reach the store
 
 ### Release
 - Intel Mac build alongside Apple Silicon
