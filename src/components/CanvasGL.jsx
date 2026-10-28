@@ -331,8 +331,8 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
   }, [duration, enableOutputActions, isRecording, setRecording])
 
 
-  const [{ material, uniforms, placeholder }] = useState(createVisualizerMaterial)
-  const [pipeline] = useState(() => createEffectsPipeline(gl, scene, camera))
+  const [{ material, uniforms, placeholder, createEffectsNode }] = useState(createVisualizerMaterial)
+  const [pipeline] = useState(() => createEffectsPipeline(gl, scene, camera, createEffectsNode))
 
   useEffect(() => () => {
     pipeline.dispose()
@@ -575,6 +575,8 @@ function VisualizerScene({ renderState = null, mediaDescriptor = null, preferIma
     if (p.edgeQuality !== edgeQuality) { uniformValues.uEdgeQuality.value = edgeQuality; p.edgeQuality = edgeQuality }
 
     pipeline.update({
+      edgeDetect: cappedEdge,
+      shift: effects.shift,
       bloom: effects.bloom,
       chromaticAberration: perfCap ? Math.min(effects.chromaticAberration, 0.5) : effects.chromaticAberration,
       noise: perfCap ? Math.min(effects.noise, 0.5) : effects.noise,
